@@ -5,11 +5,6 @@ import trimesh
 import mcubes
 import vis_utils as vu
 
-def visualize_pcd(points):
-	scene = trimesh.Scene()
-	if points is not None:
-		scene.add_geometry(points)
-	scene.show()
 
 def main():
 	dataset_name = "hand"
