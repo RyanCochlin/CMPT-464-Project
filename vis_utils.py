@@ -4,7 +4,7 @@ import trimesh
 import mcubes
 from scipy.interpolate import griddata
 
-def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=128):
+def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=256):
 	"""Extract mesh from SDF using PyMCubes marching cubes.
 	
 	Args:
@@ -93,7 +93,26 @@ def visualize_pcd(points, color=(0, 0, 255, 255), scene=None):
 	else:
 		scene.show()
 
-def visualize_sphere_mesh(center, radius, color=(255, 0, 0, 100), scene=None):
+def visualize_sphere_by_points(center, radius, color=(255, 0, 0, 100), scene=None):
+	sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
+	sphere.apply_translation(center)
+	colors = np.array([color] * len(sphere.vertices))
+	sphere.visual.vertex_colors = colors
+
+	ret_scene = True
+	if scene is None:
+		scene = trimesh.Scene()
+		ret_scene = False
+
+	if sphere is not None:
+		scene.add_geometry(sphere)
+	
+	if(ret_scene):
+		return scene
+	else:
+		scene.show()
+
+def visualize_sphere_by_params(center, radius, color=(255, 0, 0, 100), scene=None):
 	sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
 	sphere.apply_translation(center)
 	colors = np.array([color] * len(sphere.vertices))
