@@ -34,7 +34,47 @@ def load_dataset(dataset_name, data_type):
 			path = os.path.join(dataset_path, "surface_points.ply")
 			points = trimesh.load(path)
 			return points
-		
+
+def compute_centroid(points):
+	"""Compute the centroid of the given points.
+
+	Args:
+		points (np.Array): Point cloud data
+
+	Returns:
+		centroid (np.ndarray): Centroid of the points
+	"""
+	centroid = np.mean(points, axis=0)
+	return centroid
+
+def tetrahedron_volume(a, b, c, d):
+	"""Compute the volume of a tetrahedron defined by four points.
+	Args:
+		a, b, c, d (np.ndarray): Four points defining the tetrahedron
+	Returns:
+		volume (float): Volume of the tetrahedron
+	"""
+	return np.abs(np.linalg.det(np.vstack([b-a, c-a, d-a]))) / 6.0
+
+def compute_furthest_points(points, centroid, num_points=4, offset=0):
+	"""Compute the furthest points from the centroid.
+
+	Args:
+		points (np.Array): Point cloud data
+		centroid (np.ndarray): Centroid of the points
+		num_points (int): Number of furthest points to return
+		offset (int): Offset for selecting furthest points
+
+	Returns:
+		furthest_points (np.ndarray): Furthest points from the centroid
+	"""
+	diff = points - centroid
+	dist = np.linalg.norm(diff, axis=1)
+	ind = num_points + offset
+	furthest_indices = np.argsort(dist)[-ind:-offset if offset != 0 else None]
+	furthest_points = points[furthest_indices]
+	return furthest_points
+
 def sphere_residuals(sphere_params, points):
 	"""Compute the residuals of the sphere parameters with respect to the points.
 
@@ -149,6 +189,79 @@ def fit_sphere_ransac(sampled_points, all_points, occupancy):
 	
 	return params, found
 
+def attamet_2():
+	"""Idea:
+	1. Randomly sample 2 points from unoccupied points
+	2. Use these 2 points to define a sphere radius and center
+	3. Check how many inliers (points inside sphere) we have
+	4. Discard sphere if any inlier is occupied
+	5. Store sphere parameters if valid and remove inliers from point cloud
+	6. Repeat until desired number of spheres is found
+	"""
+	dataset_name = "dog"
+
+	sdf_values, sdf_points = load_dataset(dataset_name, "sdf")
+	occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
+	selection_points = np.copy(sdf_points)
+	selection_occupancy = np.copy(occupancy)
+	spheres = 1000
+	sphere_params = np.zeros((spheres, 4))  # x, y, z, r
+
+	found_count = 0
+	missed_count = 0
+	while found_count < spheres:
+		# early stop if too many misses
+		if missed_count >= 100000:
+			break
+
+		# 2 random points
+		non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
+		rand_indices = np.random.choice(non_occupied_indices, size=2, replace=False)
+		point1 = selection_points[rand_indices[0]]
+		point2 = selection_points[rand_indices[1]]
+
+		# compute sphere params
+		center = (point1 + point2) / 2.0
+		radius = np.linalg.norm(point1 - point2) / 2.0 + 0.01  # small offset
+		params = np.array([center[0], center[1], center[2], radius])
+
+		# check inliers
+		diff = selection_points - center
+		dist = np.linalg.norm(diff, axis=1)
+		inliers = dist < radius
+
+		point_occupied = selection_points[selection_occupancy == 1]
+		if point_occupied.size > 0:
+			diff_occ = point_occupied - center
+			dist_occ = np.linalg.norm(diff_occ, axis=1)
+			if np.any(dist_occ < radius):
+				missed_count += 1
+				continue  # discard sphere
+
+		sphere_params[found_count] = params
+		found_count += 1
+		print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
+
+		# remove inlier points
+		test = selection_points[inliers]
+		selection_points = selection_points[~inliers]
+		selection_occupancy = selection_occupancy[~inliers]
+
+	# create subtractvie CSG model
+	center, radius = get_enclosing_sphere_data(sdf_points)
+	model_params = np.array([center[0], center[1], center[2], radius])
+	enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
+
+	for i in range(spheres):
+		if sphere_params[i,3] <= 0 or sphere_params[i,3] >= radius:
+			continue
+		sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
+		enclosing_sphere_sdf = np.maximum(enclosing_sphere_sdf, -sphere_sdf)
+
+	final_model = enclosing_sphere_sdf
+
+	vu.visualize_sdf(final_model, sdf_points)
+
 def main():
 	dataset_name = "dog"
 
@@ -179,11 +292,38 @@ def main():
 		distance, indices = tree.query(query_point, k=k_val)
 		sampled_points = selection_points[indices]
 
+		# This doesn't quite work yet, but the idea is to avoid coplanar points by selecting the furthest points from the centroid
+		# This should give better results from the Jacobian-based optimization but theres a problem with the points still being clustered
+		# The fix should be to select furthest points on each side of the centroid rather than just overall furthest points
+
+		# get centeroid and find 4 furthest points from sampled points	
+		# centroid = compute_centroid(sampled_points)
+		# offset = 0
+		# while True:
+		# 	sphere_points = compute_furthest_points(sampled_points, centroid, num_points=40, offset=offset)
+		# 	# check if points are not coplanar
+		# 	vol = tetrahedron_volume(sphere_points[0], sphere_points[1], sphere_points[2], sphere_points[3])
+		# 	offset += 1
+		# 	if vol > 1e-6:
+		# 		break
+
+		# visualize the selected points for testing
+		# cloud = trimesh.points.PointCloud(sphere_points, colors=[255, 255, 0, 255])
+		# selection_points_cloud = trimesh.points.PointCloud(selection_points, colors=[255, 0, 0, 10])
+		# sampled_points_cloud = trimesh.points.PointCloud(sampled_points, colors=[0, 0, 255, 100])
+		# scene = trimesh.Scene()
+		# scene.add_geometry(cloud)
+		# scene.add_geometry(selection_points_cloud)
+		# scene.add_geometry(sampled_points_cloud)
+		# scene.show()
+
+		#params, found = fit_sphere_ransac(sphere_points, sdf_points, occupancy)
 		params, found = fit_sphere_ransac(sampled_points, sdf_points, occupancy)
 		if not found:
 			missed_count += 1
 			continue
 		
+		# shrink nearest neighbor count if too many misses
 		if(missed_count >= 500):
 			k_val = max(k_val - 5, 5)
 		
@@ -207,6 +347,8 @@ def main():
 	model_params = np.array([center[0], center[1], center[2], radius])
 	enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
 
+	# had an idea to also do this sphere rejection by radius inside the RANSAC loop instead of here to ensure we get a full count of spheres
+	# still need to test if this improves results though
 	for i in range(spheres):
 		if sphere_params[i,3] <= 0 or sphere_params[i,3] >= radius:
 			continue
@@ -219,4 +361,10 @@ def main():
 
 
 if __name__ == "__main__":
-	main()
+	method = "attamet_2"
+
+	match method:
+		case "attamet_2":
+			attamet_2()
+		case "main":
+			main()
