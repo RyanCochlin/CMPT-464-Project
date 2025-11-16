@@ -4,6 +4,10 @@ import trimesh
 import mcubes
 from scipy.interpolate import griddata
 
+# Global flag to enable/disable visualization
+# this is so we don't have to remove visualization calls throughout the code
+g_enable_vis = True
+
 def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=256):
 	"""Extract mesh from SDF using PyMCubes marching cubes.
 	
@@ -33,6 +37,9 @@ def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=256):
 	return mesh
 
 def visualize_mesh(mesh, scene=None):
+	if not g_enable_vis:
+		return
+	
 	ret_scene = True
 	if scene is None:
 		scene = trimesh.Scene()
@@ -46,6 +53,9 @@ def visualize_mesh(mesh, scene=None):
 		scene.show()
 
 def visualize_ocu(ocu_values, scene=None):
+	if not g_enable_vis:
+		return
+	
 	ret_scene = True
 	if scene is None:
 		scene = trimesh.Scene()
@@ -60,6 +70,9 @@ def visualize_ocu(ocu_values, scene=None):
 		scene.show()
 
 def visualize_sdf(sdf_values, sdf_points, resolution=128, scene=None):
+	if not g_enable_vis:
+		return
+	
 	sdf_model = extract_mesh_from_sdf(sdf_values, sdf_points, resolution)
 
 	ret_scene = True
@@ -76,6 +89,8 @@ def visualize_sdf(sdf_values, sdf_points, resolution=128, scene=None):
 		scene.show()
 
 def visualize_pcd(points, color=(0, 0, 255, 255), scene=None):
+	if not g_enable_vis:
+		return
 	
 	colors = np.array([color] * len(points.vertices))
 	points.visual.vertex_colors = colors
@@ -93,19 +108,21 @@ def visualize_pcd(points, color=(0, 0, 255, 255), scene=None):
 	else:
 		scene.show()
 
-def visualize_sphere_by_points(center, radius, color=(255, 0, 0, 100), scene=None):
-	sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
-	sphere.apply_translation(center)
-	colors = np.array([color] * len(sphere.vertices))
-	sphere.visual.vertex_colors = colors
+def visualize_pointcloud(points, colors=None, scene=None):
+	if not g_enable_vis:
+		return
+	
+	if colors is None:
+		colors = np.array([[0, 0, 255, 255]] * len(points))
+	point_cloud = trimesh.points.PointCloud(points, colors=colors)
 
 	ret_scene = True
 	if scene is None:
 		scene = trimesh.Scene()
 		ret_scene = False
 
-	if sphere is not None:
-		scene.add_geometry(sphere)
+	if point_cloud is not None:
+		scene.add_geometry(point_cloud)
 	
 	if(ret_scene):
 		return scene
@@ -113,6 +130,9 @@ def visualize_sphere_by_points(center, radius, color=(255, 0, 0, 100), scene=Non
 		scene.show()
 
 def visualize_sphere_by_params(center, radius, color=(255, 0, 0, 100), scene=None):
+	if not g_enable_vis:
+		return
+	
 	sphere = trimesh.creation.icosphere(subdivisions=3, radius=radius)
 	sphere.apply_translation(center)
 	colors = np.array([color] * len(sphere.vertices))

@@ -5,6 +5,7 @@ import trimesh
 from scipy.spatial import KDTree
 import mcubes
 import vis_utils as vu
+import miniball as mb
 
 def load_dataset(dataset_name, data_type):
 	"""Load dataset based on the specified data type.
@@ -75,6 +76,67 @@ def compute_furthest_points(points, centroid, num_points=4, offset=0):
 	furthest_points = points[furthest_indices]
 	return furthest_points
 
+def find_sphere_axis_extents(center, points):
+	"""Find the axis-aligned extents of points on the sphere surface.
+
+	Args:
+		center (np.ndarray): Center of the sphere
+		points (np.Array): Point cloud data
+
+	Returns:
+		extents (dict): Axis-aligned extents of the points
+	"""
+	axes = np.eye(3)
+	extents = []
+
+	for axis in axes:
+		diff = points - center
+		proj = diff @ axis
+		min_idx = np.argmin(proj)
+		max_idx = np.argmax(proj)
+		extents.append(points[min_idx])
+		extents.append(points[max_idx])
+	
+	picks = np.stack(extents, axis=0)
+	return picks
+
+def k_means_clustering(points, k, max_iters=100):
+	"""Perform k-means clustering on the given points.
+
+	Args:
+		points (np.Array): Point cloud data
+		k (int): Number of clusters
+		max_iters (int): Maximum number of iterations
+
+	Returns:
+		cluster_centers (np.ndarray): Centers of the clusters
+		point_labels (np.ndarray): Labels of the points
+	"""
+	# Initialize cluster centers with random points from the dataset
+	idx = np.random.choice(points.shape[0], size=k, replace=False)
+	cluster_centers = points[idx]
+
+	for iteration in range(max_iters):
+		# Assign points to the nearest cluster center
+		diff = points[:, np.newaxis, :] - cluster_centers[np.newaxis, :, :]
+		dist = np.linalg.norm(diff, axis=2)
+		labels = np.argmin(dist, axis=1)
+
+		# Update cluster centers
+		for i in range(k):
+			cluster_points = points[labels == i]
+			if len(cluster_points) > 0:
+				new_center = np.mean(cluster_points, axis=0)
+
+				# early stopping if centers do not change
+				if np.allclose(new_center, cluster_centers[i]):
+					return cluster_centers, labels
+				
+				cluster_centers[i] = new_center
+		
+	return cluster_centers, labels
+	
+
 def sphere_residuals(sphere_params, points):
 	"""Compute the residuals of the sphere parameters with respect to the points.
 
@@ -107,8 +169,10 @@ def sphere_jacobian(sphere_params, points):
 	center = sphere_params[:3]
 	radius = sphere_params[3:]
 
+	e = 1e-8
 	diff = points - center
 	dist = np.linalg.norm(diff, axis=1, keepdims=True)
+	dist = np.maximum(dist, e)  # prevent division by zero
 
 	jacobian_center = -diff / dist
 	jacobian_radius = -np.ones_like(dist)
@@ -170,7 +234,7 @@ def fit_sphere_ransac(sampled_points, all_points, occupancy):
 		JTJ = jacobian.T @ jacobian
 		JTJ = JTJ + lam * np.eye(JTJ.shape[0]) # Levenberg-Marquardt damping
 		JTr = jacobian.T @ residuals
-		delta = -np.linalg.solve(JTJ, JTr).flatten()
+		delta = -np.linalg.solve(JTJ, JTr)
 
 		new_params = params + delta
 
@@ -188,6 +252,64 @@ def fit_sphere_ransac(sampled_points, all_points, occupancy):
 			break
 	
 	return params, found
+
+def fit_sphere_ransac_2(sampled_points, all_points, occupancy, num_iterations=1000):
+	"""Fit a sphere to the given points using RANSAC.
+
+	Args:
+		sampled_points (np.Array): Sampled points for sphere fitting
+		all_points (np.Array): All points in the point cloud
+		occupancy (np.Array): Occupancy values for the points
+		num_iterations (int): Number of RANSAC iterations
+
+	Returns:
+		center (np.ndarray): Center of the fitted sphere
+		radius (float): Radius of the fitted sphere
+		found (bool): Whether a valid sphere was found
+	"""
+	# method:
+	# 1. Pick two random points from sampled points
+	# 2. Compute sphere params from these two points
+	# 3. Check inliers to the sphere
+	# 4. Discard sphere if any inlier is occupied
+	# 5. Repeat. Keep sphere with most inliers
+	best_params = None
+	best_inlier_count = 0
+
+	point_occupied = all_points[occupancy == 1]
+	for i in range(num_iterations):
+		rand_indices = np.random.choice(sampled_points.shape[0], size=2, replace=False)
+		point1 = sampled_points[rand_indices[0]]
+		point2 = sampled_points[rand_indices[1]]
+
+		# compute sphere params
+		center = (point1 + point2) / 2.0
+		radius = np.linalg.norm(point1 - point2) / 2.0
+		params = np.array([center[0], center[1], center[2], radius])
+
+		# check inliers
+		diff = sampled_points - center
+		dist = np.linalg.norm(diff, axis=1)
+		inliers = dist < radius
+		inlier_count = np.sum(inliers)
+
+		if inlier_count > best_inlier_count:
+			# check occupied points
+			if point_occupied.size > 0:
+				diff_occ = point_occupied - center
+				dist_occ = np.linalg.norm(diff_occ, axis=1)
+				if np.any(dist_occ < radius):
+					continue  # discard sphere
+
+			best_inlier_count = inlier_count
+			best_params = params
+
+		# check if we have enough inliers to stop early
+		if best_inlier_count > sampled_points.shape[0] * 0.9:
+			break
+
+	found = best_params is not None
+	return best_params, found
 
 def attamet_2():
 	"""Idea:
@@ -261,6 +383,91 @@ def attamet_2():
 	final_model = enclosing_sphere_sdf
 
 	vu.visualize_sdf(final_model, sdf_points)
+
+def attempt_3():
+	"""Idea:
+	1. Use k-means clustering to group unoccupied points
+	2. For each cluster, use miniball to get initial sphere estimate
+	3. For each cluster, fit a sphere using RANSAC
+		3. a. Pick two points inside the cluster
+		3. b. Compute sphere params from these two points
+		3. c. Count inliers to the sphere
+		3. d. Repeat. Keep sphere with most inliers
+	4. Check how many inliers we have
+	5. Discard sphere if any inlier is occupied
+	6. Store sphere parameters if valid and remove inliers from point cloud
+	7. Repeat until desired number of spheres is found
+	"""
+	dataset_name = "hand"
+	sdf_values, sdf_points = load_dataset(dataset_name, "sdf")
+	occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
+
+	spheres = 2000
+	sphere_params = np.zeros((spheres, 4))  # x, y, z, r
+	selection_points = np.copy(sdf_points)
+	selection_occupancy = np.copy(occupancy)
+
+	found_count = 0
+	while found_count < spheres:
+		# select only unoccupied points
+		non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
+		selection_points = selection_points[non_occupied_indices]
+		selection_occupancy = selection_occupancy[non_occupied_indices]
+
+		# k-means clustering
+		k = min(50, selection_points.shape[0])
+		cluster_centers, point_labels = k_means_clustering(selection_points, k)
+
+		#scene = trimesh.Scene()
+		for i in range(k):
+			cluster_points = selection_points[point_labels == i]
+
+			# make sure there's enough points to fit a sphere
+			if cluster_points.shape[0] < 4:
+				continue
+
+			color_seed = np.random.randint(0, 255, size=(k, 3))
+			#scene = vu.visualize_pointcloud(cluster_points, colors=[color_seed[i].tolist() + [255]] * cluster_points.shape[0], scene=scene)
+			#scene.show()
+
+			params, found = fit_sphere_ransac_2(cluster_points, sdf_points, occupancy)
+			if not found:
+				print("Sphere fitting failed, skipping.")
+				color_seed = np.random.randint(0, 255, size=(k, 3))
+				#vu.visualize_sphere_by_params(center=params[:3], radius=params[3], scene=scene)
+				continue
+			
+			print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
+			color_seed = np.random.randint(0, 255, size=(k, 3))
+			#vu.visualize_sphere_by_params(center=params[:3], radius=params[3], scene=scene)
+
+			sphere_params[found_count] = params
+			found_count += 1
+
+		# remove inlier points
+		residuals = sphere_residuals(params, selection_points)
+		inliers = np.abs(residuals) < 0.01
+		selection_points = selection_points[~inliers]
+		selection_occupancy = selection_occupancy[~inliers]
+
+		if found_count >= spheres:
+			break
+
+	# create subtractvie CSG model
+	center, radius = get_enclosing_sphere_data(sdf_points)
+	model_params = np.array([center[0], center[1], center[2], radius])
+	enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
+
+	for i in range(spheres):
+		if sphere_params[i,3] <= 0 or sphere_params[i,3] >= radius:
+			continue
+		sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
+		enclosing_sphere_sdf = np.maximum(enclosing_sphere_sdf, -sphere_sdf)
+
+	final_model = enclosing_sphere_sdf
+
+	vu.visualize_sdf(final_model, sdf_points)
+
 
 def main():
 	dataset_name = "dog"
@@ -361,10 +568,12 @@ def main():
 
 
 if __name__ == "__main__":
-	method = "attamet_2"
+	method = 3
 
 	match method:
-		case "attamet_2":
+		case 3:
+			attempt_3()
+		case 2:
 			attamet_2()
-		case "main":
+		case 1:
 			main()
