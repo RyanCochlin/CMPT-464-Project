@@ -398,7 +398,7 @@ def attempt_3():
 	6. Store sphere parameters if valid and remove inliers from point cloud
 	7. Repeat until desired number of spheres is found
 	"""
-	dataset_name = "hand"
+	dataset_name = "dog"
 	sdf_values, sdf_points = load_dataset(dataset_name, "sdf")
 	occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
 
@@ -407,50 +407,51 @@ def attempt_3():
 	selection_points = np.copy(sdf_points)
 	selection_occupancy = np.copy(occupancy)
 
+	# select only unoccupied points
+	non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
+	selection_points = selection_points[non_occupied_indices]
+	selection_occupancy = selection_occupancy[non_occupied_indices]
+
 	found_count = 0
 	while found_count < spheres:
-		# select only unoccupied points
-		non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
-		selection_points = selection_points[non_occupied_indices]
-		selection_occupancy = selection_occupancy[non_occupied_indices]
 
 		# k-means clustering
 		k = min(50, selection_points.shape[0])
 		cluster_centers, point_labels = k_means_clustering(selection_points, k)
 
-		#scene = trimesh.Scene()
+		scene = trimesh.Scene()
+		start_found_count = found_count
+		missed_count = 0
 		for i in range(k):
 			cluster_points = selection_points[point_labels == i]
 
 			# make sure there's enough points to fit a sphere
 			if cluster_points.shape[0] < 4:
+				missed_count += 1
 				continue
-
-			color_seed = np.random.randint(0, 255, size=(k, 3))
-			#scene = vu.visualize_pointcloud(cluster_points, colors=[color_seed[i].tolist() + [255]] * cluster_points.shape[0], scene=scene)
-			#scene.show()
 
 			params, found = fit_sphere_ransac_2(cluster_points, sdf_points, occupancy)
 			if not found:
-				print("Sphere fitting failed, skipping.")
-				color_seed = np.random.randint(0, 255, size=(k, 3))
-				#vu.visualize_sphere_by_params(center=params[:3], radius=params[3], scene=scene)
+				missed_count += 1
+				print(f"Sphere fitting failed, skipping with {missed_count} misses.")
 				continue
 			
 			print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
 			color_seed = np.random.randint(0, 255, size=(k, 3))
-			#vu.visualize_sphere_by_params(center=params[:3], radius=params[3], scene=scene)
 
 			sphere_params[found_count] = params
 			found_count += 1
 
-		# remove inlier points
-		residuals = sphere_residuals(params, selection_points)
-		inliers = np.abs(residuals) < 0.01
-		selection_points = selection_points[~inliers]
-		selection_occupancy = selection_occupancy[~inliers]
+		for i in range(start_found_count, found_count):
+			# remove inlier points
+			params = sphere_params[i]
+			residuals = sphere_residuals(params, selection_points)
+			inliers = residuals < 0.01
+			selection_points = selection_points[~inliers]
+			selection_occupancy = selection_occupancy[~inliers]
 
-		if found_count >= spheres:
+		# break if no more points to select from or we have enough spheres
+		if found_count >= spheres or missed_count >= k or selection_points.shape[0] < 10:
 			break
 
 	# create subtractvie CSG model

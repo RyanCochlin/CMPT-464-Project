@@ -34,6 +34,7 @@ def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=256):
 	vertices, faces = mcubes.marching_cubes(sdf_grid, 0.0)
 	
 	mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+	mesh.invert()
 	return mesh
 
 def visualize_mesh(mesh, scene=None):
