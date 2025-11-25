@@ -12,6 +12,7 @@ import mcubes
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from tqdm import tqdm
+from utils.utils import sample_pcd
 
 
 def quat_to_rot_matrix(quat, device):
@@ -244,7 +245,7 @@ def reconstruct_mesh_with_superquadrics(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     if isinstance(mesh_or_points, trimesh.Trimesh):
-        points = mesh_or_points.vertices
+        points = sample_pcd(mesh_or_points, 4096)
     elif isinstance(mesh_or_points, trimesh.PointCloud):
         points = mesh_or_points.vertices
     elif isinstance(mesh_or_points, np.ndarray):

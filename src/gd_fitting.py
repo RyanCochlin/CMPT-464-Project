@@ -9,6 +9,7 @@ import trimesh
 from torch.nn import functional as F
 from skimage.measure import marching_cubes
 from mesh_to_sdf import mesh_to_sdf
+from utils.utils import compute_sdf_grid
 
 
 def sdf_grid_to_mesh(sdf_grid):
@@ -63,11 +64,7 @@ class SphereSet(nn.Module):
         return sphere_sdf, sphere_params
 
 
-def get_grid_points(resolution):
-    ix, iy, iz = np.indices((resolution, resolution, resolution))
-    pts = (np.stack([ix, iy, iz], axis=-1).reshape(-1, 3) + 0.5) / resolution
-    pts = pts * 2.0 - 1.0
-    return pts
+
 
 
 def normalize_mesh(mesh, scale=0.9):
@@ -110,8 +107,7 @@ def reconstruct_mesh_from_spheres(
     
     centroid, max_dim = normalize_mesh(mesh, scale=mesh_scale)
     
-    points = get_grid_points(resolution)
-    values = mesh_to_sdf(mesh, points)
+    points, values = compute_sdf_grid(mesh, resolution=resolution)
     
     points = torch.from_numpy(points).float().to(device)
     values = torch.from_numpy(values).float().to(device)

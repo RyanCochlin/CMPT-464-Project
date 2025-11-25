@@ -6,6 +6,7 @@ import numpy as np
 import trimesh
 from scipy.spatial import KDTree
 from utils.vis_utils import *
+from utils.utils import compute_sdf
 
 def k_means_clustering(points, k, max_iters=100):
 	idx = np.random.choice(points.shape[0], size=k, replace=False)
@@ -129,16 +130,32 @@ def fit_sphere_ransac(sampled_points, all_points, occupancy, num_iterations=1000
 	found = best_params is not None
 	return best_params, found
 
+def normalize_mesh(mesh):
+    #normalize to [-0.5,0.5]
+    bbox = mesh.bounding_box.extents
+    max_dim = np.max(bbox)
+    centroid = mesh.bounding_box.centroid
+    mesh.apply_translation(-centroid)
+    mesh.apply_scale(1.0 / max_dim)
+    return centroid, max_dim
+
+def unnormalize_mesh(mesh, centroid, max_dim):
+    mesh.apply_scale(max_dim)
+    mesh.apply_translation(centroid)
+    return mesh
+
 def reconstruct_with_kmeans_ransac(
-	sdf_points,
-	sdf_values,
+	mesh,
 	num_spheres=2000,
 	k_clusters=50,
 	ransac_iterations=1000,
 	inlier_threshold=0.01,
 	min_cluster_size=4,
-	verbose=True
+	verbose=True,
+	sdf_n_points=100000
 ):
+	centroid, max_dim = normalize_mesh(mesh)
+	sdf_points, sdf_values = compute_sdf(mesh, num_points=sdf_n_points)
 	occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
 	sphere_params = np.zeros((num_spheres, 4))
 	selection_points = np.copy(sdf_points)
@@ -173,8 +190,11 @@ def reconstruct_with_kmeans_ransac(
 			if verbose:
 				print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
 
+
 			sphere_params[found_count] = params
 			found_count += 1
+			if found_count >= num_spheres:
+				break
 
 		for i in range(start_found_count, found_count):
 			params = sphere_params[i]
@@ -190,7 +210,7 @@ def reconstruct_with_kmeans_ransac(
 	model_params = np.array([center[0], center[1], center[2], radius])
 	enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
 
-	for i in range(num_spheres):
+	for i in range(found_count):
 		if sphere_params[i, 3] <= 0 or sphere_params[i, 3] >= radius:
 			continue
 		sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
@@ -198,95 +218,23 @@ def reconstruct_with_kmeans_ransac(
 
 	mesh = extract_mesh_from_sdf(enclosing_sphere_sdf, sdf_points, resolution=64)
 
-	mesh.apply_scale(0.5)
-
-	return mesh
-
-
-def reconstruct_with_knn_ransac(
-	sdf_points,
-	sdf_values,
-	num_spheres=3000,
-	k_neighbors=40,
-	inlier_threshold=0.01,
-	max_misses=500,
-	neighbor_decrement=5,
-	min_neighbors=5,
-	verbose=True
-):
-	occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
-	sphere_params = np.zeros((num_spheres, 4))
-	selection_points = np.copy(sdf_points)
-	selection_occupancy = np.copy(occupancy)
-	tree = KDTree(selection_points)
-
-	found_count = 0
-	missed_count = 0
-	k_val = k_neighbors
-	
-	while found_count < num_spheres:
-		non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
-		rand_indices = np.random.choice(non_occupied_indices, size=1, replace=False)
-		query_point = selection_points[rand_indices[0]]
-		distance, indices = tree.query(query_point, k=k_val)
-		sampled_points = selection_points[indices]
-
-		params, found = fit_sphere_levenberg_marquardt(sampled_points, sdf_points, occupancy)
-		if not found:
-			missed_count += 1
-			continue
-		
-		if missed_count >= max_misses:
-			k_val = max(k_val - neighbor_decrement, min_neighbors)
-		
-		missed_count = 0
-		sphere_params[found_count] = params
-		found_count += 1
-		
-		if verbose:
-			print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
-
-		residuals = sphere_residuals(params, selection_points)
-		inliers = np.abs(residuals) < inlier_threshold
-		selection_points = selection_points[~inliers]
-		selection_occupancy = selection_occupancy[~inliers]
-
-		tree = KDTree(selection_points)
-		if selection_points.shape[0] < 10:
-			break
-
-	center, radius = get_enclosing_sphere_data(sdf_points)
-	model_params = np.array([center[0], center[1], center[2], radius])
-	enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
-
-	for i in range(num_spheres):
-		if sphere_params[i, 3] <= 0 or sphere_params[i, 3] >= radius:
-			continue
-		sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
-		enclosing_sphere_sdf = np.maximum(enclosing_sphere_sdf, -sphere_sdf)
-
-	mesh = extract_mesh_from_sdf(enclosing_sphere_sdf, sdf_points, resolution=64)
-	mesh.apply_scale(0.5)
+	mesh = unnormalize_mesh(mesh, centroid, max_dim)
 
 	return mesh
 
 
 def main():
 	dataset_name = "dog"
-	data_path = os.path.join("./data", dataset_name, "voxel_and_sdf.npz")
-	data = np.load(data_path)
-	sdf_values = data["sdf_values"]
-	sdf_points = data["sdf_points"]
-
-	final_sdf, sphere_params = reconstruct_with_kmeans_ransac(
-		sdf_points,
-		sdf_values,
-		num_spheres=2000,
-		k_clusters=50,
+	dataset_path = os.path.join("./data", dataset_name)
+	mesh_path = os.path.join(dataset_path, f"{dataset_name}.obj")
+	mesh_model = trimesh.load(mesh_path)	
+	reconstructed_mesh = reconstruct_with_kmeans_ransac(
+		mesh_model,
+		num_spheres=512,
+		k_clusters=40,
 		verbose=True
 	)
-	
-	print(f"Reconstruction complete with {len(sphere_params)} spheres")
+	reconstructed_mesh.show()
 
 
 if __name__ == "__main__":
