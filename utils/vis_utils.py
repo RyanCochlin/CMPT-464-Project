@@ -9,17 +9,6 @@ from scipy.interpolate import griddata
 g_enable_vis = True
 
 def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=256):
-	"""Extract mesh from SDF using PyMCubes marching cubes.
-	
-	Args:
-		sdf_values (torch.tensor): SDF values
-		resolution (int): Grid resolution
-		bounds (tuple): Grid bounds
-		
-	Returns:
-		trimesh.Trimesh: Extracted mesh
-	"""
-	# Reshape SDF values to 3D grid
 	xmin, ymin, zmin = sdf_points.min(axis=0)
 	xmax, ymax, zmax = sdf_points.max(axis=0)
 	x_lin = np.linspace(xmin, xmax, resolution)
@@ -30,10 +19,12 @@ def extract_mesh_from_sdf(sdf_values, sdf_points, resolution=256):
 	sdf_grid = griddata(sdf_points, sdf_values, grid, method='linear', fill_value=1.0)
 	sdf_grid = sdf_grid.reshape((resolution, resolution, resolution))
 	
-	# Use PyMCubes marching cubes to extract mesh
 	vertices, faces = mcubes.marching_cubes(sdf_grid, 0.0)
 	
-	mesh = trimesh.Trimesh(vertices=vertices, faces=faces)
+	vertices_normalized = vertices / (resolution - 1)
+	vertices_world = vertices_normalized * (np.array([xmax, ymax, zmax]) - np.array([xmin, ymin, zmin])) + np.array([xmin, ymin, zmin])
+	
+	mesh = trimesh.Trimesh(vertices=vertices_world, faces=faces)
 	mesh.invert()
 	return mesh
 

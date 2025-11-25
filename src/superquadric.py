@@ -1,11 +1,6 @@
-""" pip install
-torch
-numpy
-trimesh
-mcubes
-scikit-learn
-tqdm
-"""
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import torch
 import torch.nn as nn
@@ -14,28 +9,12 @@ import torch.optim as optim
 import numpy as np
 import trimesh
 import mcubes
-import os
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from tqdm import tqdm
 
 
-DATASET_NAME = "dog"
-NUM_PRIMITIVES = 20
-LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-6
-NUM_STEPS = 3000
-CLIP_GRAD_NORM = 1.0
-INPUT_PC_PATH = f"./data/{DATASET_NAME}/surface_points.ply"
-INPUT_SDF_PATH = f"./data/{DATASET_NAME}/voxel_and_sdf.npz"
-OUTPUT_DIR = f"./output/"
-OUTPUT_MESH_PATH = os.path.join(OUTPUT_DIR, f"{DATASET_NAME}_final.obj")
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
-
-
-def quat_to_rot_matrix(quat):
-    """ Differentiable quaternion [w, x, y, z] to 3x3 rot matrix. """
+def quat_to_rot_matrix(quat, device):
     w, x, y, z = quat[0], quat[1], quat[2], quat[3]
     n = torch.dot(quat, quat)
     if n == 0:
@@ -56,7 +35,6 @@ def quat_to_rot_matrix(quat):
 
 
 def rot_matrix_to_quat(m):
-    """ Differentiable 3x3 rot matrix to quaternion [w, x, y, z]. """
     m00, m01, m02 = m[0, 0], m[0, 1], m[0, 2]
     m10, m11, m12 = m[1, 0], m[1, 1], m[1, 2]
     m20, m21, m22 = m[2, 0], m[2, 1], m[2, 2]
@@ -116,34 +94,31 @@ def superquadric_implicit(points, scale, shape):
 
 
 class PrimitiveModel(nn.Module):
-    def __init__(self, init_params):
+    def __init__(self, init_params, device):
         super(PrimitiveModel, self).__init__()
         
-        # Unpack initial parameters
         init_trans = init_params['translations']
         init_rots = init_params['rotations']
         init_scales = init_params['scales']
         init_shapes = init_params['shapes']
         
         self.num_primitives = init_trans.shape[0]
+        self.device = device
 
-        # Convert initial rotation matrices to quaternions
         init_quats = torch.stack([rot_matrix_to_quat(m) for m in init_rots])
 
-        # Create nn.Parameters from these smart initial values
         self.translations = nn.Parameter(init_trans)
         self.quaternions = nn.Parameter(init_quats)
         self.scales = nn.Parameter(init_scales)
         self.shapes = nn.Parameter(init_shapes)
 
     def forward(self, points):
-        """ Calculates the SDF of the union of all primitives. """
         self.quaternions.data = F.normalize(self.quaternions.data, p=2, dim=1)
         
         all_sdfs = []
         for i in range(self.num_primitives):
             trans = self.translations[i]
-            rot_matrix = quat_to_rot_matrix(self.quaternions[i])
+            rot_matrix = quat_to_rot_matrix(self.quaternions[i], self.device)
             scale = self.scales[i]
             shape = self.shapes[i]
             
@@ -156,13 +131,7 @@ class PrimitiveModel(nn.Module):
         return union_sdf
 
 
-def load_data(path):
-    print(f"Loading data from {path}.")
-    data = trimesh.load(path)
-    
-    if isinstance(data, trimesh.PointCloud):
-        points = data.vertices
-    
+def normalize_points(points):
     centroid = np.mean(points, axis=0)
     points_normalized = points - centroid
     scale = np.max(np.linalg.norm(points_normalized, axis=1))
@@ -172,11 +141,9 @@ def load_data(path):
     return points_normalized, unnormalize_info
 
 
-def get_initialization(points, num_primitives):
-    """
-    Uses K-Means and PCA to get a good starting guess for primitive parameters.
-    """
-    print(f"Running k-Means and PCA for initialization.")
+def get_initialization(points, num_primitives, device, verbose=True):
+    if verbose:
+        print(f"Running k-Means and PCA for initialization.")
     
     kmeans = KMeans(n_clusters=num_primitives, random_state=0, n_init=10)
     labels = kmeans.fit_predict(points)
@@ -194,22 +161,18 @@ def get_initialization(points, num_primitives):
         pca = PCA(n_components=3)
         pca.fit(cluster_points)
         
-        # Translation
         center = pca.mean_
         init_trans.append(torch.tensor(center, dtype=torch.float32))
         
-        # Rotation
         rot_matrix = pca.components_
         if np.linalg.det(rot_matrix) < 0:
             rot_matrix[2, :] *= -1
         init_rots.append(torch.tensor(rot_matrix, dtype=torch.float32))
 
-        # Scale
         scales = 2.0 * np.sqrt(pca.explained_variance_)
         scales = np.maximum(scales, 1e-3)
         init_scales.append(torch.tensor(scales, dtype=torch.float32))
         
-        # Shape
         init_shapes.append(torch.tensor([1.0, 1.0], dtype=torch.float32))
 
     init_params = {
@@ -219,15 +182,12 @@ def get_initialization(points, num_primitives):
         'shapes': torch.stack(init_shapes).to(device),
     }
     
-    print(f"Initialized {len(init_trans)} valid primitives.")
+    if verbose:
+        print(f"Initialized {len(init_trans)} valid primitives.")
     return init_params
 
 
-def calculate_iou(model, sdf_gt_path):
-    data = np.load(sdf_gt_path)
-    sdf_points_gt = data["sdf_points"]
-    sdf_values_gt = data["sdf_values"]
-
+def calculate_iou(model, sdf_points_gt, sdf_values_gt, device):
     gt_points_tensor = torch.tensor(sdf_points_gt, dtype=torch.float32).to(device)
     
     model.eval()
@@ -245,90 +205,122 @@ def calculate_iou(model, sdf_gt_path):
     return intersection / union
 
 
-def export_mesh(model, unnormalize_info, sdf_gt_path, path):
+def model_to_mesh(model, unnormalize_info, grid_resolution, device):
     model.eval()
-    data = np.load(sdf_gt_path)
-
-    grid_res = None
-    grid_points = None
     
-    if "voxels" in data and data["voxels"].ndim == 3:
-        grid_shape = data["voxels"].shape
-        if grid_shape[0] == grid_shape[1] == grid_shape[2]:
-            grid_res = grid_shape[0]
-
-    elif "sdf_points" in data:
-        N = data["sdf_points"].shape[0]
-        res_guess = int(round(N**(1/3.0)))
-        if res_guess**3 == N:
-            grid_res = res_guess
-            grid_points = torch.tensor(data["sdf_points"], dtype=torch.float32).to(device)
-
-    t = torch.linspace(-1, 1, grid_res)
+    t = torch.linspace(-1, 1, grid_resolution)
     x, y, z = torch.meshgrid(t, t, t, indexing='ij')
-    if grid_points is None:
-        grid_points = torch.stack([x.reshape(-1), y.reshape(-1), z.reshape(-1)], dim=1).to(device)
+    grid_points = torch.stack([x.reshape(-1), y.reshape(-1), z.reshape(-1)], dim=1).to(device)
 
     sdf_grid = []
     for p in torch.split(grid_points, 100000):
         with torch.no_grad():
             sdf_grid.append(model(p).cpu())
     
-    sdf_grid = torch.cat(sdf_grid, dim=0).reshape(grid_res, grid_res, grid_res).numpy()
+    sdf_grid = torch.cat(sdf_grid, dim=0).reshape(grid_resolution, grid_resolution, grid_resolution).numpy()
     
     vertices, triangles = mcubes.marching_cubes(sdf_grid, 0.0)
 
     centroid, scale = unnormalize_info
-    vertices_normalized = vertices / (grid_res - 1) * 2.0 - 1.0
+    vertices_normalized = vertices / (grid_resolution - 1) * 2.0 - 1.0
     vertices_world = vertices_normalized * scale + centroid
     
     mesh = trimesh.Trimesh(vertices=vertices_world, faces=triangles)
-    mesh.export(path)
-    print(f"Exported mesh to {path}")
+    return mesh
 
 
-def main():
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+def reconstruct_mesh_with_superquadrics(
+    mesh_or_points,
+    num_primitives=20,
+    num_steps=3000,
+    learning_rate=1e-3,
+    weight_decay=1e-6,
+    clip_grad_norm=1.0,
+    grid_resolution=64,
+    device=None,
+    verbose=True
+):
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # 1. Load Data
-    points_gt_np, unnormalize_info = load_data(INPUT_PC_PATH)
-    points_gt_torch = torch.tensor(points_gt_np, dtype=torch.float32).to(device)
+    if isinstance(mesh_or_points, trimesh.Trimesh):
+        points = mesh_or_points.vertices
+    elif isinstance(mesh_or_points, trimesh.PointCloud):
+        points = mesh_or_points.vertices
+    elif isinstance(mesh_or_points, np.ndarray):
+        points = mesh_or_points
+    else:
+        raise ValueError("Input must be trimesh.Trimesh, trimesh.PointCloud, or numpy array")
     
-    # 2. Get Initialization (K-Means + PCA)
-    init_params = get_initialization(points_gt_np, NUM_PRIMITIVES)
+    points_normalized, unnormalize_info = normalize_points(points)
+    points_torch = torch.tensor(points_normalized, dtype=torch.float32).to(device)
     
-    # 3. Initialize Model and Optimizer
-    model = PrimitiveModel(init_params).to(device)
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    init_params = get_initialization(points_normalized, num_primitives, device, verbose)
     
-    # 4. --- OPTIMIZATION LOOP ---
-    pbar = tqdm(range(NUM_STEPS), desc="Optimizing", ncols=150)
+    model = PrimitiveModel(init_params, device).to(device)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    
+    if verbose:
+        pbar = tqdm(range(num_steps), desc="Optimizing", ncols=150)
+    else:
+        pbar = range(num_steps)
+    
     for _ in pbar:
         model.train()
         optimizer.zero_grad()
         
-        sdf_pred = model(points_gt_torch)
+        sdf_pred = model(points_torch)
         loss = torch.abs(sdf_pred).mean()
         
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=CLIP_GRAD_NORM)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_norm)
         optimizer.step()
         
-        pbar.set_postfix(loss=f"{loss.item():.6f}")
+        if verbose and hasattr(pbar, 'set_postfix'):
+            pbar.set_postfix(loss=f"{loss.item():.6f}")
     
-    # 5. --- FINAL EVALUATION ---
     model.eval()
     with torch.no_grad():
-        sdf_final = model(points_gt_torch)
+        sdf_final = model(points_torch)
         loss_final = torch.abs(sdf_final).mean().item()
     
-    iou_final = calculate_iou(model, INPUT_SDF_PATH)
+    if verbose:
+        print(f"Final Loss: {loss_final:.6f}")
     
-    print(f"Loss: {loss_final:<8.6f}")
-    print(f"IoU: {iou_final:<8.4f}")
+    reconstructed_mesh = model_to_mesh(model, unnormalize_info, grid_resolution, device)
+    
+    return reconstructed_mesh, model
 
-    # 6. --- EXPORT FINAL MESH ---
-    export_mesh(model, unnormalize_info, INPUT_SDF_PATH, OUTPUT_MESH_PATH)
+
+def main():
+    DATASET_NAME = "dog"
+    NUM_PRIMITIVES = 20
+    INPUT_PC_PATH = f"./data/{DATASET_NAME}/surface_points.ply"
+    INPUT_SDF_PATH = f"./data/{DATASET_NAME}/voxel_and_sdf.npz"
+    OUTPUT_DIR = f"./output/"
+    OUTPUT_MESH_PATH = os.path.join(OUTPUT_DIR, f"{DATASET_NAME}_final.obj")
+    
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
+    data = trimesh.load(INPUT_PC_PATH)
+    
+    reconstructed_mesh, model = reconstruct_mesh_with_superquadrics(
+        data,
+        num_primitives=NUM_PRIMITIVES,
+        num_steps=3000,
+        device=device,
+        verbose=True
+    )
+    
+    sdf_data = np.load(INPUT_SDF_PATH)
+    iou = calculate_iou(model, sdf_data["sdf_points"], sdf_data["sdf_values"], device)
+    print(f"IoU: {iou:.4f}")
+    
+    reconstructed_mesh.export(OUTPUT_MESH_PATH)
+    print(f"Exported mesh to {OUTPUT_MESH_PATH}")
 
 
 if __name__ == "__main__":

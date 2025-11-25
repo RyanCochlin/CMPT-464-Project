@@ -1,0 +1,120 @@
+import argparse
+import os
+import sys
+import numpy as np
+import trimesh
+
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+
+from gd_fitting import reconstruct_mesh_from_spheres
+from kmeans_ransac import reconstruct_with_kmeans_ransac, reconstruct_with_knn_ransac
+from superquadric import reconstruct_mesh_with_superquadrics
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset_dir', type=str, default='data', help='Path to the dataset directory')
+    parser.add_argument('--output_dir', type=str, default='results', help='Path to the output directory')
+    parser.add_argument('--method', type=str, choices=['gd', 'kmeans_ransac', 'knn_ransac', 'superquadrics'], required=True, help='Reconstruction method to use')
+    parser.add_argument('--num_spheres', type=int, default=512, help='Number of spheres for GD method')
+    parser.add_argument('--num_primitives', type=int, default=20, help='Number of primitives for superquadrics')
+    parser.add_argument('--resolution', type=int, default=50, help='Grid resolution for GD method')
+    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs for GD method')
+    parser.add_argument('--steps', type=int, default=3000, help='Number of steps for superquadrics')
+    args = parser.parse_args()
+
+    models = []
+    for model_name in os.listdir(args.dataset_dir):
+        model_dir = os.path.join(args.dataset_dir, model_name)
+        if not os.path.isdir(model_dir):
+            continue
+            
+        obj_path = os.path.join(model_dir, f"{model_name}.obj")
+        voxel_sdf_path = os.path.join(model_dir, "voxel_and_sdf.npz")
+        surface_points_path = os.path.join(model_dir, "surface_points.ply")
+        
+        if os.path.exists(obj_path):
+            models.append({
+                'name': model_name,
+                'obj_path': obj_path,
+                'voxel_sdf_path': voxel_sdf_path,
+                'surface_points_path': surface_points_path
+            })
+
+    
+    
+    print(f"Found {len(models)} models to process")
+    print(f"Using method: {args.method}")
+
+    if args.method == "gd":
+        os.makedirs(os.path.join(args.output_dir, "gd"), exist_ok=True)
+        for i, model in enumerate(models):
+            print(f"\n[{i+1}/{len(models)}] Processing {model['name']} with gradient descent method...")
+            try:
+                mesh = trimesh.load(model['obj_path'])
+                reconstructed_mesh, sphere_params = reconstruct_mesh_from_spheres(
+                    mesh,
+                    num_spheres=args.num_spheres,
+                    resolution=args.resolution,
+                    num_epochs=args.epochs,
+                    verbose=True
+                )
+                
+                output_path = os.path.join(args.output_dir,"gd", f"{model['name']}.obj")
+                reconstructed_mesh.export(output_path)
+                print(f"Saved to {output_path}")
+            except Exception as e:
+                print(f"Error processing {model['name']}: {e}")
+
+    elif args.method == "kmeans_ransac":
+        os.makedirs(os.path.join(args.output_dir, "kmeans_ransac"), exist_ok=True)
+        for i, model in enumerate(models):
+            print(f"\n[{i+1}/{len(models)}] Processing {model['name']} with k-means RANSAC method...")
+            try:
+                if not os.path.exists(model['voxel_sdf_path']):
+                    print(f"Skipping {model['name']}: voxel_and_sdf.npz not found")
+                    continue
+                    
+                data = np.load(model['voxel_sdf_path'])
+                sdf_points = data['sdf_points']
+                sdf_values = data['sdf_values']
+                
+                mesh = reconstruct_with_kmeans_ransac(
+                    sdf_points,
+                    sdf_values,
+                    num_spheres=args.num_spheres,
+                    k_clusters=50,
+                    verbose=True
+                )
+                
+                output_path = os.path.join(args.output_dir, "kmeans_ransac", f"{model['name']}.obj")
+                mesh.export(output_path)
+                print(f"Saved to {output_path}")
+            except Exception as e:
+                print(f"Error processing {model['name']}: {e}")
+
+    elif args.method == "superquadrics":
+        os.makedirs(os.path.join(args.output_dir, "superquadrics"), exist_ok=True)
+        for i, model in enumerate(models):
+            print(f"\n[{i+1}/{len(models)}] Processing {model['name']} with superquadrics method...")
+            try:
+                if os.path.exists(model['surface_points_path']):
+                    data = trimesh.load(model['surface_points_path'])
+                else:
+                    print(f"Surface points not found, loading mesh instead")
+                    data = trimesh.load(model['obj_path'])
+                
+                reconstructed_mesh, sq_model = reconstruct_mesh_with_superquadrics(
+                    data,
+                    num_primitives=args.num_primitives,
+                    num_steps=args.steps,
+                    verbose=True
+                )
+                
+                output_path = os.path.join(args.output_dir, "superquadrics", f"{model['name']}.obj")
+                reconstructed_mesh.export(output_path)
+                print(f"Saved to {output_path}")
+            except Exception as e:
+                print(f"Error processing {model['name']}: {e}")
+    
+    print("\nProcessing complete!")
