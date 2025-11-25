@@ -67,3 +67,35 @@ python bulk_run.py --method superquadrics --num_primitives 20 --steps 3000
 - `--steps`: Number of optimization steps for superquadrics (default: 3000)
 
 ### Evaluation
+
+Evaluate reconstruction quality using multiple distance metrics:
+
+```bash
+# Evaluate all methods with all metrics
+python evaluate.py --cd --emd --hd
+
+# Evaluate specific method
+python evaluate.py --method gd --cd --emd --hd
+
+# Evaluate with custom sampling
+python evaluate.py --num_samples 20000 --cd --emd
+```
+
+**Arguments:**
+- `--dataset_dir`: Path to dataset directory (default: `data`)
+- `--output_dir`: Path to output directory (default: `results`)
+- `--method`: Method to evaluate - `all`, `gd`, `kmeans_ransac`, or `superquadrics` (default: `all`)
+- `--cd`: Compute Chamfer Distance
+- `--emd`: Compute Earth Mover's Distance (approximate)
+- `--hd`: Compute Hausdorff Distance
+- `--num_samples`: Number of points to sample from meshes (default: 10000)
+
+**Metrics:**
+- **Chamfer Distance (CD)**: Average bidirectional nearest-neighbor distance between point clouds
+- **Earth Mover's Distance (EMD)**: Approximated using Hungarian algorithm on subsampled points
+- **Hausdorff Distance (HD)**: Maximum of directed Hausdorff distances in both directions
+
+**Output:**
+Results are saved to `results/evaluation_results.json` containing:
+- Individual results for each model and method
+- Summary statistics (mean, std, min, max) for each metric per method
