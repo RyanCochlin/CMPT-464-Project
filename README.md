@@ -63,7 +63,7 @@ python bulk_run.py --method superquadrics --num_primitives 20 --steps 3000
 - `--num_spheres`: Number of spheres for GD method (default: 512)
 - `--num_primitives`: Number of primitives for superquadrics (default: 20)
 - `--resolution`: Grid resolution for GD method (default: 50)
-- `--epochs`: Number of epochs for GD method (default: 500)
+- `--epochs`: Number of epochs for GD method (default: 1000)
 - `--steps`: Number of optimization steps for superquadrics (default: 3000)
 
 ### Evaluation

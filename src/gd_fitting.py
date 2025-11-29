@@ -54,7 +54,7 @@ class SphereSet(nn.Module):
         self.radius_raw = nn.Parameter(radius_raw)
 
     def forward(self, query_points):
-        radius = F.softplus(self.radius_raw)
+        radius = F.softplus(self.radius_raw) + 0.01
         scale = 1.0 - radius.unsqueeze(1)
         center = torch.tanh(self.center_raw) * scale
         
@@ -92,7 +92,7 @@ def reconstruct_mesh_from_spheres(
     mesh,
     num_spheres=512,
     resolution=50,
-    num_epochs=500,
+    num_epochs=1000,
     learning_rate=0.05,
     regularization=0.001,
     mesh_scale=1.6,
@@ -115,6 +115,9 @@ def reconstruct_mesh_from_spheres(
     
     model = SphereSet(num_spheres=num_spheres).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+
+    band_width_nb = 0.04 #0.05
+    global_weight = 0.05
     
     for epoch in range(num_epochs):
         optimizer.zero_grad(set_to_none=True)
@@ -122,12 +125,20 @@ def reconstruct_mesh_from_spheres(
         sphere_sdf, sphere_params = model(points)
         sphere_sdf = bsmin(sphere_sdf, dim=-1).squeeze()
         
-        clamped_sphere_sdf = torch.clamp(sphere_sdf, 0, clamp_value)
-        values_clamped = torch.clamp(values, 0, clamp_value)
+        # Original MSE loss with clamping. I kept it here for reference.
+        #clamped_sphere_sdf = torch.clamp(sphere_sdf, 0, clamp_value)
+        #values_clamped = torch.clamp(values, 0, clamp_value)
+        #mse_loss = nn.MSELoss()(clamped_sphere_sdf, values_clamped)
+
+        # narrow band loss based on method outlined here https://microsites.arinex.com.au/EMBC/pdf/full-paper_167.pdf
+        # Combined with weak global loss to encourage overall shape matching
+        near_mask = values.abs() < band_width_nb
+        loss_near = F.mse_loss(sphere_sdf[near_mask], values[near_mask])
+        loss_global = global_weight * F.mse_loss(sphere_sdf, values)
+        loss_sign = 0.001 * torch.mean((torch.sign(sphere_sdf) - torch.sign(values))**2)
         
-        mse_loss = nn.MSELoss()(clamped_sphere_sdf, values_clamped)
         reg_loss = regularization * torch.mean(sphere_params[:, 3])
-        loss = mse_loss + reg_loss
+        loss = loss_near + loss_global + loss_sign + reg_loss
         
         loss.backward()
         optimizer.step()
@@ -158,7 +169,7 @@ def main():
         mesh_model,
         num_spheres=512,
         resolution=50,
-        num_epochs=500,
+        num_epochs=1000,
         verbose=True
     )
     

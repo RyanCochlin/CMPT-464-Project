@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_spheres', type=int, default=512, help='Number of spheres for GD method')
     parser.add_argument('--num_primitives', type=int, default=20, help='Number of primitives for superquadrics')
     parser.add_argument('--resolution', type=int, default=50, help='Grid resolution for GD method')
-    parser.add_argument('--epochs', type=int, default=500, help='Number of epochs for GD method')
+    parser.add_argument('--epochs', type=int, default=1000, help='Number of epochs for GD method')
     parser.add_argument('--steps', type=int, default=3000, help='Number of steps for superquadrics')
     args = parser.parse_args()
 
