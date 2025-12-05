@@ -39,7 +39,6 @@ Fits superquadric primitives using k-means initialization and gradient descent o
 ```bash
 conda create -n cmpt464 python=3.10
 conda activate cmpt464
-conda install pytorch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 pytorch-cuda=12.1 -c pytorch -c nvidia
 pip install -r requirements.txt
 ```
 
@@ -52,7 +51,6 @@ Process multiple models with a single command:
 ```bash
 python bulk_run.py --method gd --num_spheres 512 --resolution 50 --epochs 500
 python bulk_run.py --method kmeans_ransac
-python bulk_run.py --method knn_ransac
 python bulk_run.py --method superquadrics --num_primitives 20 --steps 3000
 ```
 
