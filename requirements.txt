@@ -8,3 +8,4 @@ matplotlib
 scikit-image
 tqdm
 mkl==2024.0
+torch

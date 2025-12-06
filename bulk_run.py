@@ -73,7 +73,7 @@ if __name__ == "__main__":
                 mesh,
                 num_spheres=args.num_spheres,
                 k_clusters=40,
-                grid_resolution=args.resolution,
+                # grid_resolution=args.resolution,
                 verbose=True
             )
             
