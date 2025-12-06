@@ -9,7 +9,7 @@ import trimesh
 from torch.nn import functional as F
 from skimage.measure import marching_cubes
 from mesh_to_sdf import mesh_to_sdf
-from utils.utils import compute_sdf_grid
+from utils.utils import compute_sdf_grid, get_grid_points
 
 
 def sdf_grid_to_mesh(sdf_grid):
@@ -98,7 +98,8 @@ def reconstruct_mesh_from_spheres(
     mesh_scale=1.6,
     clamp_value=0.1,
     device=None,
-    verbose=True
+    verbose=True,
+    output_resolution=100
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -147,19 +148,33 @@ def reconstruct_mesh_from_spheres(
             print(f"Epoch {epoch}/{num_epochs}, Loss: {loss.item():.6f}")
     
     best_sdf = -sphere_sdf
-    grid = best_sdf.cpu().detach().numpy().reshape(resolution, resolution, resolution)
-    
-    grid[0, :, :] = clamp_value
-    grid[-1, :, :] = clamp_value
-    grid[:, 0, :] = clamp_value
-    grid[:, -1, :] = clamp_value
-    grid[:, :, 0] = clamp_value
-    grid[:, :, -1] = clamp_value
-    
-    reconstructed_mesh = sdf_grid_to_mesh(grid)
+
+    grid_points = get_grid_points(output_resolution)
+    sdf = compute_sphere_sdf(torch.from_numpy(grid_points).float(), sphere_params.to('cpu'))
+    best_sdf = -bsmin(sdf, dim=-1).detach().numpy().reshape(output_resolution, output_resolution, output_resolution)
+    best_sdf[0, :, :] = clamp_value
+    best_sdf[-1, :, :] = clamp_value
+    best_sdf[:, 0, :] = clamp_value
+    best_sdf[:, -1, :] = clamp_value
+    best_sdf[:, :, 0] = clamp_value
+    best_sdf[:, :, -1] = clamp_value    
+    reconstructed_mesh = sdf_grid_to_mesh(best_sdf)
     reconstructed_mesh = unnormalize_mesh(reconstructed_mesh, centroid, max_dim, scale=mesh_scale)
-    
     return reconstructed_mesh, sphere_params
+
+    # grid = best_sdf.cpu().detach().numpy().reshape(resolution, resolution, resolution)
+    
+    # grid[0, :, :] = clamp_value
+    # grid[-1, :, :] = clamp_value
+    # grid[:, 0, :] = clamp_value
+    # grid[:, -1, :] = clamp_value
+    # grid[:, :, 0] = clamp_value
+    # grid[:, :, -1] = clamp_value
+    
+    # reconstructed_mesh = sdf_grid_to_mesh(grid)
+    # reconstructed_mesh = unnormalize_mesh(reconstructed_mesh, centroid, max_dim, scale=mesh_scale)
+    
+    # return reconstructed_mesh, sphere_params
 
 
 def main():

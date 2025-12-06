@@ -152,7 +152,8 @@ def reconstruct_with_kmeans_ransac(
 	inlier_threshold=0.01,
 	min_cluster_size=4,
 	verbose=True,
-	sdf_n_points=100000
+	sdf_n_points=100000,
+	grid_resolution=64
 ):
 	centroid, max_dim = normalize_mesh(mesh)
 	sdf_points, sdf_values = compute_sdf(mesh, num_points=sdf_n_points)
@@ -216,7 +217,7 @@ def reconstruct_with_kmeans_ransac(
 		sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
 		enclosing_sphere_sdf = np.maximum(enclosing_sphere_sdf, -sphere_sdf)
 
-	mesh = extract_mesh_from_sdf(enclosing_sphere_sdf, sdf_points, resolution=64)
+	mesh = extract_mesh_from_sdf(enclosing_sphere_sdf, sdf_points, resolution=grid_resolution)
 
 	mesh = unnormalize_mesh(mesh, centroid, max_dim)
 
