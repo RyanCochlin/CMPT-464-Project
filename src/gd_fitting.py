@@ -7,23 +7,12 @@ import numpy as np
 import torch.nn as nn
 import trimesh
 from torch.nn import functional as F
-from skimage.measure import marching_cubes
+
 from mesh_to_sdf import mesh_to_sdf
-from utils.utils import compute_sdf_grid, get_grid_points
+from utils.utils import compute_sdf_grid, get_grid_points, sdf_grid_to_mesh
 
 
-def sdf_grid_to_mesh(sdf_grid):
-    R = sdf_grid.shape[0]
-    verts, faces, normals, _ = marching_cubes(
-        volume=sdf_grid,
-        level=0.0,
-        spacing=(1.0, 1.0, 1.0)
-    )
-    scale = 1 / (R - 1)
-    verts_normalized = verts * scale
-    verts_world = verts_normalized * 2.0 - 1.0
-    mesh = trimesh.Trimesh(vertices=verts_world, faces=faces, vertex_normals=normals)
-    return mesh
+
 
 
 def bsmin(a, dim, k=22.0, keepdim=False):
@@ -99,7 +88,7 @@ def reconstruct_mesh_from_spheres(
     clamp_value=0.1,
     device=None,
     verbose=True,
-    output_resolution=100
+    output_resolution=200
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -150,8 +139,20 @@ def reconstruct_mesh_from_spheres(
     best_sdf = -sphere_sdf
 
     grid_points = get_grid_points(output_resolution)
-    sdf = compute_sphere_sdf(torch.from_numpy(grid_points).float(), sphere_params.to('cpu'))
-    best_sdf = -bsmin(sdf, dim=-1).detach().numpy().reshape(output_resolution, output_resolution, output_resolution)
+    
+    # Process in batches to avoid OOM
+    batch_size = 10000
+    grid_points_t = torch.from_numpy(grid_points).float()
+    sphere_params_cpu = sphere_params.to('cpu')
+    best_sdf_list = []
+    
+    for i in range(0, len(grid_points), batch_size):
+        batch_points = grid_points_t[i:i+batch_size]
+        batch_sphere_sdf = compute_sphere_sdf(batch_points, sphere_params_cpu)
+        batch_val = bsmin(batch_sphere_sdf, dim=-1)
+        best_sdf_list.append(batch_val)
+        
+    best_sdf = -torch.cat(best_sdf_list).detach().numpy().reshape(output_resolution, output_resolution, output_resolution)
     best_sdf[0, :, :] = clamp_value
     best_sdf[-1, :, :] = clamp_value
     best_sdf[:, 0, :] = clamp_value
