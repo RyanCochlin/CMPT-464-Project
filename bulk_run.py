@@ -6,7 +6,7 @@ import trimesh
 
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from gd_fitting import reconstruct_mesh_from_spheres
+from subtractive_spheres import reconstruct_mesh_from_spheres
 from kmeans_ransac import reconstruct_with_kmeans_ransac
 from superquadric import reconstruct_mesh_with_superquadrics
 from neural_spheres import neural_sphere_reconstruction
@@ -17,11 +17,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_dir', type=str, default='data', help='Path to the dataset directory')
     parser.add_argument('--output_dir', type=str, default='results', help='Path to the output directory')
-    parser.add_argument('--method', type=str, choices=['gd', 'kmeans_ransac', 'knn_ransac', 'superquadrics', 'neural_spheres'],nargs='+', required=True, help='Reconstruction method to use')
-    parser.add_argument('--num_spheres', type=int, default=512, help='Number of spheres for GD method')
+    parser.add_argument('--method', type=str, choices=['subtractive', 'kmeans_ransac', 'superquadrics', 'neural_spheres'],nargs='+', required=True, help='Reconstruction method to use')
+    parser.add_argument('--num_spheres', type=int, default=512, help='Number of spheres for subtractive spheres method')
     parser.add_argument('--num_primitives', type=int, default=20, help='Number of primitives for superquadrics')
-    parser.add_argument('--resolution', type=int, default=50, help='Grid resolution for GD method')
-    parser.add_argument('--epochs', type=int, default=1000, help='Number of epochs for GD method')
+    parser.add_argument('--resolution', type=int, default=50, help='Grid resolution for subtractive spheres method')
+    parser.add_argument('--epochs', type=int, default=1000, help='Number of epochs for subtractive spheres method')
     parser.add_argument('--steps', type=int, default=3000, help='Number of steps for superquadrics')
     args = parser.parse_args()
 
@@ -48,8 +48,8 @@ if __name__ == "__main__":
     print(f"Found {len(models)} models to process")
     print(f"Using method: {args.method}")
 
-    if "gd" in args.method:
-        os.makedirs(os.path.join(args.output_dir, "gd"), exist_ok=True)
+    if "subtractive" in args.method:
+        os.makedirs(os.path.join(args.output_dir, "subtractive"), exist_ok=True)
         for i, model in enumerate(models):
             print(f"\n[{i+1}/{len(models)}] Processing {model['name']} with gradient descent method...")
             mesh = trimesh.load(model['obj_path'])
@@ -61,7 +61,7 @@ if __name__ == "__main__":
                 verbose=True
             )
             
-            output_path = os.path.join(args.output_dir,"gd", f"{model['name']}.obj")
+            output_path = os.path.join(args.output_dir,"subtractive", f"{model['name']}.obj")
             reconstructed_mesh.export(output_path)
             print(f"Saved to {output_path}")
 

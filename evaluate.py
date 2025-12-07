@@ -131,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset_dir', type=str, default='data', help='Path to the dataset directory')
     parser.add_argument('--output_dir', type=str, default='results', help='Path to the output directory')
     parser.add_argument('--method', type=str, default='all', 
-                        choices=['all', 'gd', 'kmeans_ransac', 'superquadrics', 'neural_spheres'],
+                        choices=['all', 'subtractive', 'kmeans_ransac', 'superquadrics', 'neural_spheres'],
                         help='Method to evaluate (default: all methods)')
     parser.add_argument('--cd', action='store_true', help='Compute Chamfer Distance')
     parser.add_argument('--emd', action='store_true', help='Compute Earth Mover\'s Distance')
@@ -151,7 +151,7 @@ if __name__ == "__main__":
     
     # Get list of methods to evaluate
     if args.method == 'all':
-        methods = ['gd', 'kmeans_ransac', 'superquadrics', 'neural_spheres']
+        methods = ['subtractive', 'kmeans_ransac', 'superquadrics', 'neural_spheres']
     else:
         methods = [args.method]
     

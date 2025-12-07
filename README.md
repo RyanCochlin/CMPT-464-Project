@@ -2,37 +2,7 @@
 
 This project implements three different methods for 3D shape reconstruction using primitive-based representations.
 
-## Methods
 
-### 1. Gradient Descent Sphere Fitting (GD)
-Uses gradient descent optimization to fit a collection of spheres to a mesh using signed distance functions.
-
-**Features:**
-- Differentiable sphere parameters (centers and radii)
-- Smooth minimum approximation using log-sum-exp
-- MSE loss with radius regularization
-- Outputs reconstructed mesh in original coordinate frame
-
-### 2. K-Means RANSAC Sphere Fitting
-Uses clustering and RANSAC to fit negative spheres for subtractive CSG modeling.
-
-**Two variants:**
-- **K-Means RANSAC**: Clusters unoccupied points and fits spheres to each cluster
-- **K-NN RANSAC**: Uses k-nearest neighbors with Levenberg-Marquardt optimization
-
-**Features:**
-- Iterative sphere fitting with inlier removal
-- Occupancy-based validation
-- Subtractive CSG model construction
-
-### 3. Superquadrics
-Fits superquadric primitives using k-means initialization and gradient descent optimization.
-
-**Features:**
-- K-means + PCA for initialization
-- Learnable translation, rotation (quaternion), scale, and shape parameters
-- Union of primitives via minimum SDF
-- Outputs reconstructed mesh
 
 ## Installation
 
@@ -46,10 +16,23 @@ pip install -r requirements.txt
 
 ### Computing The Reconstructions
 
+Process a single mesh:
+```bash
+python src/subtractive_spheres.py --input_obj path/to/input.obj --output_obj path/to/output.obj
+```
+
+**Arguments:**
+- `--input_obj`: Path to input OBJ file (required)
+- `--output_obj`: Path to output OBJ file (required)
+- `--num_spheres`: Number of spheres (default: 512)
+- `--resolution`: SDF grid resolution (default: 50)
+- `--epochs`: Number of optimization epochs (default: 1000)
+
+
 Process multiple models with a single command:
 
 ```bash
-python bulk_run.py --method gd --num_spheres 512 --resolution 50 --epochs 500
+python bulk_run.py --method subtractive --num_spheres 512 --resolution 50 --epochs 500
 python bulk_run.py --method kmeans_ransac
 python bulk_run.py --method superquadrics --num_primitives 20 --steps 3000
 ```
@@ -57,11 +40,11 @@ python bulk_run.py --method superquadrics --num_primitives 20 --steps 3000
 **Arguments:**
 - `--dataset_dir`: Path to dataset directory (default: `data`)
 - `--output_dir`: Path to output directory (default: `results`)
-- `--method`: Reconstruction method (`gd`, `kmeans_ransac`, `knn_ransac`, `superquadrics`)
-- `--num_spheres`: Number of spheres for GD method (default: 512)
+- `--method`: Reconstruction method (`subtractive`,`neural_spheres`, `kmeans_ransac`, `superquadrics`)
+- `--num_spheres`: Number of spheres for subtractive spheres method (default: 512)
 - `--num_primitives`: Number of primitives for superquadrics (default: 20)
-- `--resolution`: Grid resolution for GD method (default: 50)
-- `--epochs`: Number of epochs for GD method (default: 1000)
+- `--resolution`: Grid resolution for subtractive spheres method (default: 50)
+- `--epochs`: Number of epochs for subtractive spheres method (default: 1000)
 - `--steps`: Number of optimization steps for superquadrics (default: 3000)
 
 ### Evaluation
@@ -70,10 +53,10 @@ Evaluate reconstruction quality using multiple distance metrics:
 
 ```bash
 # Evaluate all methods with all metrics
-python evaluate.py --cd --emd --hd
+python evaluate.py 
 
 # Evaluate specific method
-python evaluate.py --method gd --cd --emd --hd
+python evaluate.py --method subtractive --cd --emd --hd
 
 # Evaluate with custom sampling
 python evaluate.py --num_samples 20000 --cd --emd
@@ -82,7 +65,7 @@ python evaluate.py --num_samples 20000 --cd --emd
 **Arguments:**
 - `--dataset_dir`: Path to dataset directory (default: `data`)
 - `--output_dir`: Path to output directory (default: `results`)
-- `--method`: Method to evaluate - `all`, `gd`, `kmeans_ransac`, or `superquadrics` (default: `all`)
+- `--method`: Method to evaluate - `all`, `subtractive`, `kmeans_ransac`, or `superquadrics` (default: `all`)
 - `--cd`: Compute Chamfer Distance
 - `--emd`: Compute Earth Mover's Distance (approximate)
 - `--hd`: Compute Hausdorff Distance
