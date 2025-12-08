@@ -9,6 +9,25 @@ from utils.vis_utils import *
 from utils.utils import compute_sdf
 
 def k_means_clustering(points, k, max_iters=100):
+	"""
+    Perform k-means clustering on a set of 3D points.
+
+    Parameters
+    ----------
+    points : (N, 3) ndarray
+        Input point cloud.
+    k : int
+        Number of clusters.
+    max_iters : int, optional
+        Maximum number of k-means iterations.
+
+    Returns
+    -------
+    cluster_centers : (k, 3) ndarray
+        Final cluster center positions.
+    labels : (N,) ndarray
+        Cluster assignment index for each point.
+    """
 	idx = np.random.choice(points.shape[0], size=k, replace=False)
 	cluster_centers = points[idx]
 
@@ -31,6 +50,21 @@ def k_means_clustering(points, k, max_iters=100):
 	
 
 def sphere_residuals(sphere_params, points):
+	"""
+    Compute residuals between points and a sphere surface.
+
+    Parameters
+    ----------
+    sphere_params : array-like, shape (4,)
+        Sphere parameters [cx, cy, cz, r].
+    points : (N, 3) ndarray
+        Points to evaluate.
+
+    Returns
+    -------
+    residuals : (N,) ndarray
+        Signed distance residuals: ||p - c|| - r for each point.
+    """
 	center = sphere_params[:3]
 	radius = sphere_params[3:]
 	diff = points - center
@@ -39,63 +73,70 @@ def sphere_residuals(sphere_params, points):
 	return residuals
 
 
-def sphere_jacobian(sphere_params, points):
-	center = sphere_params[:3]
-	e = 1e-8
-	diff = points - center
-	dist = np.linalg.norm(diff, axis=1, keepdims=True)
-	dist = np.maximum(dist, e)
-
-	jacobian_center = -diff / dist
-	jacobian_radius = -np.ones_like(dist)
-	jacobian = np.concatenate([jacobian_center, jacobian_radius], axis=1)
-	return jacobian
-
-
 def get_enclosing_sphere_data(points):
+	"""
+    Compute a simple enclosing sphere for a set of points.
+
+    Parameters
+    ----------
+    points : (N, 3) ndarray
+        Input point cloud.
+
+    Returns
+    -------
+    center : (3,) ndarray
+        Center of the enclosing sphere (mean of points).
+    radius : float
+        Sphere radius (max distance from center).
+    """
 	center = np.mean(points, axis=0)
 	radius = np.max(np.linalg.norm(points - center, axis=1))
 	return center, radius
 
 
 def build_occupancy_from_sdf(sdf_points, sdf_values):
+	"""
+    Convert signed distance values into a binary occupancy field.
+
+    Parameters
+    ----------
+    sdf_points : (N, 3) ndarray
+        Coordinates of SDF samples.
+    sdf_values : (N,) ndarray
+        Signed distance values.
+
+    Returns
+    -------
+    occupancy : (N,) ndarray
+        Binary occupancy: 1 if inside/on surface, 0 if outside.
+    """
 	occupancy = np.zeros_like(sdf_values)
 	occupancy[sdf_values <= 0] = 1
 	return occupancy
 
-def fit_sphere_levenberg_marquardt(sampled_points, all_points, occupancy, max_iters=100):
-	params = np.array([0.0, 0.0, 0.0, 0.1])
-	point_occupied = all_points[occupancy == 1]
-	found = True
-
-	for i in range(max_iters):
-		residuals = sphere_residuals(params, sampled_points)
-		jacobian = sphere_jacobian(params, sampled_points)
-
-		lam = 1e-8
-		JTJ = jacobian.T @ jacobian
-		JTJ = JTJ + lam * np.eye(JTJ.shape[0])
-		JTr = jacobian.T @ residuals
-		delta = -np.linalg.solve(JTJ, JTr)
-
-		new_params = params + delta
-
-		if point_occupied.size > 0:
-			diff = point_occupied - new_params[:3]
-			dist = np.linalg.norm(diff, axis=1)
-			if np.any(dist < new_params[3]):
-				found = False
-				break
-		
-		params = new_params
-
-		if np.linalg.norm(delta) < 1e-4:
-			break
-	
-	return params, found
-
 
 def fit_sphere_ransac(sampled_points, all_points, occupancy, num_iterations=1000):
+	"""
+    Fit a sphere to a point set using RANSAC.
+
+    Parameters
+    ----------
+    sampled_points : (N, 3) ndarray
+        Points used for sphere hypothesis generation and inlier testing.
+    all_points : (M, 3) ndarray
+        Full SDF sample points used to check for occupied (invalid) fits.
+    occupancy : (M,) ndarray
+        Binary occupancy values; 1 = occupied, 0 = free.
+    num_iterations : int
+        Number of RANSAC iterations.
+
+    Returns
+    -------
+    best_params : ndarray or None
+        Sphere parameters [cx, cy, cz, r] if a model was found.
+    found : bool
+        Whether a valid sphere model was successfully detected.
+    """
 	best_params = None
 	best_inlier_count = 0
 
@@ -131,7 +172,21 @@ def fit_sphere_ransac(sampled_points, all_points, occupancy, num_iterations=1000
 	return best_params, found
 
 def normalize_mesh(mesh):
-    #normalize to [-0.5,0.5]
+    """
+    Normalize a mesh to the range [-0.5, 0.5] in its largest dimension.
+
+    Parameters
+    ----------
+    mesh : trimesh.Trimesh
+        Mesh to normalize.
+
+    Returns
+    -------
+    centroid : (3,) ndarray
+        Original mesh centroid.
+    max_dim : float
+        Maximum bounding-box extent used for scaling.
+    """
     bbox = mesh.bounding_box.extents
     max_dim = np.max(bbox)
     centroid = mesh.bounding_box.centroid
@@ -140,6 +195,23 @@ def normalize_mesh(mesh):
     return centroid, max_dim
 
 def unnormalize_mesh(mesh, centroid, max_dim):
+    """
+    Restore a mesh to its original scale and position.
+
+    Parameters
+    ----------
+    mesh : trimesh.Trimesh
+        Normalized mesh to unnormalize.
+    centroid : (3,) ndarray
+        Original mesh centroid.
+    max_dim : float
+        Original maximum bounding-box extent.
+
+    Returns
+    -------
+    mesh : trimesh.Trimesh
+        The unnormalized mesh.
+    """
     mesh.apply_scale(max_dim)
     mesh.apply_translation(centroid)
     return mesh
