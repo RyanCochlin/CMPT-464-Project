@@ -168,12 +168,12 @@ def reconstruct_mesh_from_spheres(
         best_sdf_list.append(batch_val)
         
     best_sdf = -torch.cat(best_sdf_list).detach().numpy().reshape(output_resolution, output_resolution, output_resolution)
-    best_sdf[0, :, :] = clamp_value
-    best_sdf[-1, :, :] = clamp_value
-    best_sdf[:, 0, :] = clamp_value
-    best_sdf[:, -1, :] = clamp_value
-    best_sdf[:, :, 0] = clamp_value
-    best_sdf[:, :, -1] = clamp_value    
+    best_sdf[:3, :, :] = clamp_value
+    best_sdf[-4:, :, :] = clamp_value
+    best_sdf[:, :3, :] = clamp_value
+    best_sdf[:, -4:, :] = clamp_value
+    best_sdf[:, :, :3] = clamp_value
+    best_sdf[:, :, -4:] = clamp_value    
     reconstructed_mesh = sdf_grid_to_mesh(best_sdf)
     reconstructed_mesh = unnormalize_mesh(reconstructed_mesh, centroid, max_dim, scale=mesh_scale)
     return reconstructed_mesh, sphere_params

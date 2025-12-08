@@ -9,129 +9,154 @@ from utils.vis_utils import *
 from utils.utils import compute_sdf
 
 def k_means_clustering(points, k, max_iters=100):
-	idx = np.random.choice(points.shape[0], size=k, replace=False)
-	cluster_centers = points[idx]
+    """
+    Perform k-means clustering on a set of 3D points.
 
-	for iteration in range(max_iters):
-		diff = points[:, np.newaxis, :] - cluster_centers[np.newaxis, :, :]
-		dist = np.linalg.norm(diff, axis=2)
-		labels = np.argmin(dist, axis=1)
+    Args:
+        points ((N, 3) ndarray): Input point cloud.
+        k (int): Number of clusters.
+        max_iters (int, optional): Maximum number of k-means iterations.
 
-		for i in range(k):
-			cluster_points = points[labels == i]
-			if len(cluster_points) > 0:
-				new_center = np.mean(cluster_points, axis=0)
+    Returns:
+        cluster_centers ((k, 3) ndarray): Final cluster center positions. 
+        labels ((N,) ndarray): Cluster assignment index for each point.
+    """
+    idx = np.random.choice(points.shape[0], size=k, replace=False)
+    cluster_centers = points[idx]
 
-				if np.allclose(new_center, cluster_centers[i]):
-					return cluster_centers, labels
-				
-				cluster_centers[i] = new_center
-		
-	return cluster_centers, labels
-	
+    for iteration in range(max_iters):
+        diff = points[:, np.newaxis, :] - cluster_centers[np.newaxis, :, :]
+        dist = np.linalg.norm(diff, axis=2)
+        labels = np.argmin(dist, axis=1)
+
+        for i in range(k):
+            cluster_points = points[labels == i]
+            if len(cluster_points) > 0:
+                new_center = np.mean(cluster_points, axis=0)
+
+                if np.allclose(new_center, cluster_centers[i]):
+                    return cluster_centers, labels
+                
+                cluster_centers[i] = new_center
+        
+    return cluster_centers, labels
+    
 
 def sphere_residuals(sphere_params, points):
-	center = sphere_params[:3]
-	radius = sphere_params[3:]
-	diff = points - center
-	dist = np.linalg.norm(diff, axis=1)
-	residuals = dist - radius
-	return residuals
+    """
+    Compute the residual distance of each point to a sphere surface.
 
+    Args:
+        sphere_params ((4,) array-like): Sphere parameters in the form [cx, cy, cz, r].
+        points ((N, 3) ndarray): Input points to evaluate.
 
-def sphere_jacobian(sphere_params, points):
-	center = sphere_params[:3]
-	e = 1e-8
-	diff = points - center
-	dist = np.linalg.norm(diff, axis=1, keepdims=True)
-	dist = np.maximum(dist, e)
-
-	jacobian_center = -diff / dist
-	jacobian_radius = -np.ones_like(dist)
-	jacobian = np.concatenate([jacobian_center, jacobian_radius], axis=1)
-	return jacobian
+    Returns:
+        residuals ((N,) ndarray): Signed distance residuals for each point, computed as ||p - c|| - r.
+    """
+    center = sphere_params[:3]
+    radius = sphere_params[3:]
+    diff = points - center
+    dist = np.linalg.norm(diff, axis=1)
+    residuals = dist - radius
+    return residuals
 
 
 def get_enclosing_sphere_data(points):
-	center = np.mean(points, axis=0)
-	radius = np.max(np.linalg.norm(points - center, axis=1))
-	return center, radius
+    """
+    Compute an enclosing sphere using centroid and maximum radius.
+
+    Args:
+        points ((N, 3) ndarray): Input point cloud.
+
+    Returns:
+        center ((3,) ndarray): Centroid of the point set.
+        radius (float): Maximum Euclidean distance from centroid to any point.
+    """
+    center = np.mean(points, axis=0)
+    radius = np.max(np.linalg.norm(points - center, axis=1))
+    return center, radius
 
 
 def build_occupancy_from_sdf(sdf_points, sdf_values):
-	occupancy = np.zeros_like(sdf_values)
-	occupancy[sdf_values <= 0] = 1
-	return occupancy
+    """
+    Convert SDF samples into a binary occupancy field.
 
-def fit_sphere_levenberg_marquardt(sampled_points, all_points, occupancy, max_iters=100):
-	params = np.array([0.0, 0.0, 0.0, 0.1])
-	point_occupied = all_points[occupancy == 1]
-	found = True
+    Args:
+        sdf_points ((N, 3) ndarray): Locations of SDF samples.
+        sdf_values ((N,) ndarray): Signed distance values at each sample.
 
-	for i in range(max_iters):
-		residuals = sphere_residuals(params, sampled_points)
-		jacobian = sphere_jacobian(params, sampled_points)
-
-		lam = 1e-8
-		JTJ = jacobian.T @ jacobian
-		JTJ = JTJ + lam * np.eye(JTJ.shape[0])
-		JTr = jacobian.T @ residuals
-		delta = -np.linalg.solve(JTJ, JTr)
-
-		new_params = params + delta
-
-		if point_occupied.size > 0:
-			diff = point_occupied - new_params[:3]
-			dist = np.linalg.norm(diff, axis=1)
-			if np.any(dist < new_params[3]):
-				found = False
-				break
-		
-		params = new_params
-
-		if np.linalg.norm(delta) < 1e-4:
-			break
-	
-	return params, found
+    Returns:
+        occupancy ((N,) ndarray): Binary occupancy: 1 if inside/on surface, 0 if outside.
+    """
+    occupancy = np.zeros_like(sdf_values)
+    occupancy[sdf_values <= 0] = 1
+    return occupancy
 
 
 def fit_sphere_ransac(sampled_points, all_points, occupancy, num_iterations=1000):
-	best_params = None
-	best_inlier_count = 0
+    """
+    Fit a sphere to a point cloud using RANSAC.
 
-	point_occupied = all_points[occupancy == 1]
-	for i in range(num_iterations):
-		rand_indices = np.random.choice(sampled_points.shape[0], size=2, replace=False)
-		point1 = sampled_points[rand_indices[0]]
-		point2 = sampled_points[rand_indices[1]]
+    Args:
+        sampled_points ((N, 3) ndarray): Points used for candidate generation and inlier evaluation.
+        all_points ((M, 3) ndarray): Full set of points.
+        occupancy ((M,) ndarray): Binary occupancy mask for all_points.
+        num_iterations (int, optional): Maximum number of RANSAC iterations.
 
-		center = (point1 + point2) / 2.0
-		radius = np.linalg.norm(point1 - point2) / 2.0
-		params = np.array([center[0], center[1], center[2], radius])
+    Returns:
+        best_params ((4,) ndarray or None): Sphere parameters [cx, cy, cz, r] if a valid model was found; otherwise None.
+        found (bool): True if a valid sphere was detected.
+    """
+    best_params = None
+    best_inlier_count = 0
 
-		diff = sampled_points - center
-		dist = np.linalg.norm(diff, axis=1)
-		inliers = dist < radius
-		inlier_count = np.sum(inliers)
+    point_occupied = all_points[occupancy == 1]
+    for i in range(num_iterations):
+        rand_indices = np.random.choice(sampled_points.shape[0], size=2, replace=False)
+        point1 = sampled_points[rand_indices[0]]
+        point2 = sampled_points[rand_indices[1]]
 
-		if inlier_count > best_inlier_count:
-			if point_occupied.size > 0:
-				diff_occ = point_occupied - center
-				dist_occ = np.linalg.norm(diff_occ, axis=1)
-				if np.any(dist_occ < radius):
-					continue
+        center = (point1 + point2) / 2.0
+        radius = np.linalg.norm(point1 - point2) / 2.0
+        params = np.array([center[0], center[1], center[2], radius])
 
-			best_inlier_count = inlier_count
-			best_params = params
+        diff = sampled_points - center
+        dist = np.linalg.norm(diff, axis=1)
+        inliers = dist < radius
+        inlier_count = np.sum(inliers)
 
-		if best_inlier_count > sampled_points.shape[0] * 0.9:
-			break
+        if inlier_count > best_inlier_count:
+            if point_occupied.size > 0:
+                diff_occ = point_occupied - center
+                dist_occ = np.linalg.norm(diff_occ, axis=1)
+                if np.any(dist_occ < radius):
+                    continue
 
-	found = best_params is not None
-	return best_params, found
+            best_inlier_count = inlier_count
+            best_params = params
+
+        if best_inlier_count > sampled_points.shape[0] * 0.9:
+            break
+
+    found = best_params is not None
+    return best_params, found
 
 def normalize_mesh(mesh):
-    #normalize to [-0.5,0.5]
+    """
+    Normalize a mesh to the range [-0.5, 0.5] in its largest dimension.
+
+    Parameters
+    ----------
+    mesh : trimesh.Trimesh
+        Mesh to normalize.
+
+    Returns
+    -------
+    centroid : (3,) ndarray
+        Original mesh centroid.
+    max_dim : float
+        Maximum bounding-box extent used for scaling.
+    """
     bbox = mesh.bounding_box.extents
     max_dim = np.max(bbox)
     centroid = mesh.bounding_box.centroid
@@ -140,103 +165,120 @@ def normalize_mesh(mesh):
     return centroid, max_dim
 
 def unnormalize_mesh(mesh, centroid, max_dim):
+    """
+    Restore a mesh to its original scale and position.
+
+    Parameters
+    ----------
+    mesh : trimesh.Trimesh
+        Normalized mesh to unnormalize.
+    centroid : (3,) ndarray
+        Original mesh centroid.
+    max_dim : float
+        Original maximum bounding-box extent.
+
+    Returns
+    -------
+    mesh : trimesh.Trimesh
+        The unnormalized mesh.
+    """
     mesh.apply_scale(max_dim)
     mesh.apply_translation(centroid)
     return mesh
 
 def reconstruct_with_kmeans_ransac(
-	mesh,
-	num_spheres=2000,
-	k_clusters=50,
-	ransac_iterations=1000,
-	inlier_threshold=0.01,
-	min_cluster_size=4,
-	verbose=True,
-	sdf_n_points=100000,
-	grid_resolution=64
+    mesh,
+    num_spheres=2000,
+    k_clusters=50,
+    ransac_iterations=1000,
+    inlier_threshold=0.01,
+    min_cluster_size=4,
+    verbose=True,
+    sdf_n_points=100000,
+    grid_resolution=64
 ):
-	centroid, max_dim = normalize_mesh(mesh)
-	sdf_points, sdf_values = compute_sdf(mesh, num_points=sdf_n_points)
-	occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
-	sphere_params = np.zeros((num_spheres, 4))
-	selection_points = np.copy(sdf_points)
-	selection_occupancy = np.copy(occupancy)
+    centroid, max_dim = normalize_mesh(mesh)
+    sdf_points, sdf_values = compute_sdf(mesh, num_points=sdf_n_points)
+    occupancy = build_occupancy_from_sdf(sdf_points, sdf_values)
+    sphere_params = np.zeros((num_spheres, 4))
+    selection_points = np.copy(sdf_points)
+    selection_occupancy = np.copy(occupancy)
 
-	non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
-	selection_points = selection_points[non_occupied_indices]
-	selection_occupancy = selection_occupancy[non_occupied_indices]
+    non_occupied_indices = np.where(selection_occupancy == 0.0)[0]
+    selection_points = selection_points[non_occupied_indices]
+    selection_occupancy = selection_occupancy[non_occupied_indices]
 
-	found_count = 0
-	while found_count < num_spheres:
-		k = min(k_clusters, selection_points.shape[0])
-		cluster_centers, point_labels = k_means_clustering(selection_points, k)
+    found_count = 0
+    while found_count < num_spheres:
+        k = min(k_clusters, selection_points.shape[0])
+        cluster_centers, point_labels = k_means_clustering(selection_points, k)
 
-		start_found_count = found_count
-		missed_count = 0
-		
-		for i in range(k):
-			cluster_points = selection_points[point_labels == i]
+        start_found_count = found_count
+        missed_count = 0
+        
+        for i in range(k):
+            cluster_points = selection_points[point_labels == i]
 
-			if cluster_points.shape[0] < min_cluster_size:
-				missed_count += 1
-				continue
+            if cluster_points.shape[0] < min_cluster_size:
+                missed_count += 1
+                continue
 
-			params, found = fit_sphere_ransac(cluster_points, sdf_points, occupancy, ransac_iterations)
-			if not found:
-				missed_count += 1
-				if verbose:
-					print(f"Sphere fitting failed, skipping with {missed_count} misses.")
-				continue
-			
-			if verbose:
-				print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
+            params, found = fit_sphere_ransac(cluster_points, sdf_points, occupancy, ransac_iterations)
+            if not found:
+                missed_count += 1
+                if verbose:
+                    print(f"Sphere fitting failed, skipping with {missed_count} misses.")
+                continue
+            
+            if verbose:
+                print(f"Found sphere {found_count}: Center = {params[:3]}, Radius = {params[3]}")
 
 
-			sphere_params[found_count] = params
-			found_count += 1
-			if found_count >= num_spheres:
-				break
+            sphere_params[found_count] = params
+            found_count += 1
+            if found_count >= num_spheres:
+                break
 
-		for i in range(start_found_count, found_count):
-			params = sphere_params[i]
-			residuals = sphere_residuals(params, selection_points)
-			inliers = residuals < inlier_threshold
-			selection_points = selection_points[~inliers]
-			selection_occupancy = selection_occupancy[~inliers]
+        for i in range(start_found_count, found_count):
+            params = sphere_params[i]
+            residuals = sphere_residuals(params, selection_points)
+            inliers = residuals < inlier_threshold
+            selection_points = selection_points[~inliers]
+            selection_occupancy = selection_occupancy[~inliers]
 
-		if found_count >= num_spheres or missed_count >= k or selection_points.shape[0] < 10:
-			break
+        if found_count >= num_spheres or missed_count >= k or selection_points.shape[0] < 10:
+            break
 
-	center, radius = get_enclosing_sphere_data(sdf_points)
-	model_params = np.array([center[0], center[1], center[2], radius])
-	enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
+    center, radius = get_enclosing_sphere_data(sdf_points)
+    model_params = np.array([center[0], center[1], center[2], radius])
+    enclosing_sphere_sdf = sphere_residuals(model_params, sdf_points)
 
-	for i in range(found_count):
-		if sphere_params[i, 3] <= 0 or sphere_params[i, 3] >= radius:
-			continue
-		sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
-		enclosing_sphere_sdf = np.maximum(enclosing_sphere_sdf, -sphere_sdf)
+    for i in range(found_count):
+        if sphere_params[i, 3] <= 0 or sphere_params[i, 3] >= radius:
+            continue
+        sphere_sdf = sphere_residuals(sphere_params[i], sdf_points)
+        enclosing_sphere_sdf = np.maximum(enclosing_sphere_sdf, -sphere_sdf)
 
-	mesh = extract_mesh_from_sdf(enclosing_sphere_sdf, sdf_points, resolution=grid_resolution)
+    mesh = extract_mesh_from_sdf(enclosing_sphere_sdf, sdf_points, resolution=grid_resolution)
 
-	mesh = unnormalize_mesh(mesh, centroid, max_dim)
+    mesh = unnormalize_mesh(mesh, centroid, max_dim)
 
-	return mesh
+    return mesh
 
 
 def main():
-	dataset_name = "dog"
-	dataset_path = os.path.join("./data", dataset_name)
-	mesh_path = os.path.join(dataset_path, f"{dataset_name}.obj")
-	mesh_model = trimesh.load(mesh_path)	
-	reconstructed_mesh = reconstruct_with_kmeans_ransac(
-		mesh_model,
-		num_spheres=512,
-		k_clusters=40,
-		verbose=True
-	)
-	reconstructed_mesh.show()
+    dataset_name = "dog"
+    dataset_path = os.path.join("./data", dataset_name)
+    mesh_path = os.path.join(dataset_path, f"{dataset_name}.obj")
+    mesh_model = trimesh.load(mesh_path)	
+    reconstructed_mesh = reconstruct_with_kmeans_ransac(
+        mesh_model,
+        num_spheres=512,
+        k_clusters=40,
+        verbose=True
+    )
+    reconstructed_mesh.show()
 
 
 if __name__ == "__main__":
-	main()
+    main()
