@@ -97,7 +97,7 @@ def reconstruct_mesh_from_spheres(
     clamp_value=0.1,
     device=None,
     verbose=True,
-    output_resolution=100
+    output_resolution=50
 ):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"

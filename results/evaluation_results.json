@@ -1,193 +1,193 @@
 {
   "individual_results": {
-    "gd": {
+    "subtractive": {
       "dog": {
-        "chamfer_distance": 0.014910005773924158,
-        "earth_movers_distance": 0.041137942279378246,
-        "hausdorff_distance": 0.4881619908003467
+        "chamfer_distance": 0.011789484576689272,
+        "earth_movers_distance": 0.04856577505830923,
+        "hausdorff_distance": 0.4884622572969573
       },
       "hand": {
-        "chamfer_distance": 0.023955637025102533,
-        "earth_movers_distance": 0.0646336695610815,
-        "hausdorff_distance": 0.6593966892556088
+        "chamfer_distance": 0.013362038383597305,
+        "earth_movers_distance": 0.059701382653042714,
+        "hausdorff_distance": 0.6580286778389753
       },
       "pot": {
-        "chamfer_distance": 0.03990332713635859,
-        "earth_movers_distance": 0.11342652632254377,
-        "hausdorff_distance": 0.633241330897279
+        "chamfer_distance": 0.023916739284150255,
+        "earth_movers_distance": 0.09845477644474437,
+        "hausdorff_distance": 0.6330290287354254
       },
       "rod": {
-        "chamfer_distance": 0.016483358208936316,
-        "earth_movers_distance": 0.050526406217563706,
-        "hausdorff_distance": 0.7502907148459433
+        "chamfer_distance": 0.01470955260640615,
+        "earth_movers_distance": 0.039568006171080285,
+        "hausdorff_distance": 0.7504072727930535
       },
       "sofa": {
-        "chamfer_distance": 0.025210826210985374,
-        "earth_movers_distance": 0.08325208281048586,
-        "hausdorff_distance": 0.5944216701587314
+        "chamfer_distance": 0.018721702496368717,
+        "earth_movers_distance": 0.055528005250969625,
+        "hausdorff_distance": 0.6070461732337502
       }
     },
     "kmeans_ransac": {
       "dog": {
-        "chamfer_distance": 0.014405946331240153,
-        "earth_movers_distance": 0.047732991784876444,
-        "hausdorff_distance": 0.8286372511603847
+        "chamfer_distance": 0.014466428392980032,
+        "earth_movers_distance": 0.04208287200262304,
+        "hausdorff_distance": 0.661298525192365
       },
       "hand": {
-        "chamfer_distance": 0.1567416839307003,
-        "earth_movers_distance": 0.45915554879634396,
-        "hausdorff_distance": 0.9437619530983012
+        "chamfer_distance": 0.15336735949016972,
+        "earth_movers_distance": 0.43276695136736204,
+        "hausdorff_distance": 0.8513711472972982
       },
       "pot": {
-        "chamfer_distance": 0.015068250189470892,
-        "earth_movers_distance": 0.0371699497501181,
-        "hausdorff_distance": 0.32648365999226187
+        "chamfer_distance": 0.014406847161023612,
+        "earth_movers_distance": 0.040689069342047135,
+        "hausdorff_distance": 0.8426467063205088
       },
       "rod": {
-        "chamfer_distance": 0.06187024910092279,
-        "earth_movers_distance": 0.16508288434002114,
-        "hausdorff_distance": 0.9315823994906118
+        "chamfer_distance": 0.05143735700111056,
+        "earth_movers_distance": 0.17077007647014425,
+        "hausdorff_distance": 1.0849918588497214
       },
       "sofa": {
-        "chamfer_distance": 0.025188459993625165,
-        "earth_movers_distance": 0.06520830621708315,
-        "hausdorff_distance": 0.9161484742214256
+        "chamfer_distance": 0.024869639538569174,
+        "earth_movers_distance": 0.05963914153800601,
+        "hausdorff_distance": 0.22761661984737264
       }
     },
     "superquadrics": {
       "dog": {
-        "chamfer_distance": 0.005764240605691864,
-        "earth_movers_distance": 0.03178693616896541,
-        "hausdorff_distance": 0.0569367950093487
+        "chamfer_distance": 0.008241411772939852,
+        "earth_movers_distance": 0.04665485192475272,
+        "hausdorff_distance": 0.16500715273542924
       },
       "hand": {
-        "chamfer_distance": 0.005024833005517792,
-        "earth_movers_distance": 0.02498126448261985,
-        "hausdorff_distance": 0.039372678594865436
+        "chamfer_distance": 0.030287530386404166,
+        "earth_movers_distance": 0.08990403051887287,
+        "hausdorff_distance": 0.24818772261022673
       },
       "pot": {
-        "chamfer_distance": 0.055561089814334295,
-        "earth_movers_distance": 0.15711710960297193,
-        "hausdorff_distance": 0.4546751547032522
+        "chamfer_distance": 0.023518727986771012,
+        "earth_movers_distance": 0.09590814454806508,
+        "hausdorff_distance": 0.3261638799114268
       },
       "rod": {
-        "chamfer_distance": 0.004279069588904976,
-        "earth_movers_distance": 0.022241335830894493,
-        "hausdorff_distance": 0.022964332555060214
+        "chamfer_distance": 0.0041963601767950574,
+        "earth_movers_distance": 0.024313936975836767,
+        "hausdorff_distance": 0.017902565166292607
       },
       "sofa": {
-        "chamfer_distance": 0.050060187700879166,
-        "earth_movers_distance": 0.15464570957214482,
-        "hausdorff_distance": 0.4892673538503411
+        "chamfer_distance": 0.04640421666910093,
+        "earth_movers_distance": 0.14694733188923298,
+        "hausdorff_distance": 0.4801924711539073
       }
     },
     "neural_spheres": {
       "dog": {
-        "chamfer_distance": 0.047564817955618524,
-        "earth_movers_distance": 0.10803315532024751,
-        "hausdorff_distance": 0.18519679496860988
+        "chamfer_distance": 0.04705185147993418,
+        "earth_movers_distance": 0.10603743114551613,
+        "hausdorff_distance": 0.18749283938532854
       },
       "hand": {
-        "chamfer_distance": 0.100488483765908,
-        "earth_movers_distance": 0.12804597476275587,
-        "hausdorff_distance": 0.23252281375094883
+        "chamfer_distance": 0.10024887716621282,
+        "earth_movers_distance": 0.12593786098102877,
+        "hausdorff_distance": 0.23242841830384467
       },
       "pot": {
-        "chamfer_distance": 0.06407832905536744,
-        "earth_movers_distance": 0.08939145910535243,
-        "hausdorff_distance": 0.1990938456237064
+        "chamfer_distance": 0.0649308742651428,
+        "earth_movers_distance": 0.08703111527697588,
+        "hausdorff_distance": 0.19935278496945152
       },
       "rod": {
-        "chamfer_distance": 0.1448497334169842,
-        "earth_movers_distance": 0.1947223760865773,
-        "hausdorff_distance": 0.26533549672421297
+        "chamfer_distance": 0.14344479925097564,
+        "earth_movers_distance": 0.20542045827106448,
+        "hausdorff_distance": 0.26541072287746187
       },
       "sofa": {
-        "chamfer_distance": 0.09041043160643461,
-        "earth_movers_distance": 0.1387885840860232,
-        "hausdorff_distance": 0.3064832382685984
+        "chamfer_distance": 0.09033695102288086,
+        "earth_movers_distance": 0.13870199217725354,
+        "hausdorff_distance": 0.3086240713014351
       }
     }
   },
   "summary_statistics": {
-    "gd": {
+    "subtractive": {
       "chamfer_distance": {
-        "mean": 0.024092630871061397,
-        "std": 0.00887095123024222,
-        "min": 0.014910005773924158,
-        "max": 0.03990332713635859
+        "mean": 0.01649990346944234,
+        "std": 0.004363151248199626,
+        "min": 0.011789484576689272,
+        "max": 0.023916739284150255
       },
       "earth_movers_distance": {
-        "mean": 0.07059532543821061,
-        "std": 0.02569336707566046,
-        "min": 0.041137942279378246,
-        "max": 0.11342652632254377
+        "mean": 0.060363589115629245,
+        "std": 0.020230692659361428,
+        "min": 0.039568006171080285,
+        "max": 0.09845477644474437
       },
       "hausdorff_distance": {
-        "mean": 0.6251024791915818,
-        "std": 0.08556685982434452,
-        "min": 0.4881619908003467,
-        "max": 0.7502907148459433
+        "mean": 0.6273946819796323,
+        "std": 0.0846387210450316,
+        "min": 0.4884622572969573,
+        "max": 0.7504072727930535
       }
     },
     "kmeans_ransac": {
       "chamfer_distance": {
-        "mean": 0.05465491790919186,
-        "std": 0.05390570455389818,
-        "min": 0.014405946331240153,
-        "max": 0.1567416839307003
+        "mean": 0.05170952631677063,
+        "std": 0.052599062461362096,
+        "min": 0.014406847161023612,
+        "max": 0.15336735949016972
       },
       "earth_movers_distance": {
-        "mean": 0.15486993617768857,
-        "std": 0.15878593004605177,
-        "min": 0.0371699497501181,
-        "max": 0.45915554879634396
+        "mean": 0.14918962214403647,
+        "std": 0.14976336809735488,
+        "min": 0.040689069342047135,
+        "max": 0.43276695136736204
       },
       "hausdorff_distance": {
-        "mean": 0.789322747592597,
-        "std": 0.23492113267724563,
-        "min": 0.32648365999226187,
-        "max": 0.9437619530983012
+        "mean": 0.7335849715014533,
+        "std": 0.28652544350605036,
+        "min": 0.22761661984737264,
+        "max": 1.0849918588497214
       }
     },
     "superquadrics": {
       "chamfer_distance": {
-        "mean": 0.02413788414306562,
-        "std": 0.02348044161647656,
-        "min": 0.004279069588904976,
-        "max": 0.055561089814334295
+        "mean": 0.022529649398402206,
+        "std": 0.015306346294043302,
+        "min": 0.0041963601767950574,
+        "max": 0.04640421666910093
       },
       "earth_movers_distance": {
-        "mean": 0.0781544711315193,
-        "std": 0.06354466891176655,
-        "min": 0.022241335830894493,
-        "max": 0.15711710960297193
+        "mean": 0.0807456591713521,
+        "std": 0.04252801572577811,
+        "min": 0.024313936975836767,
+        "max": 0.14694733188923298
       },
       "hausdorff_distance": {
-        "mean": 0.21264326294257355,
-        "std": 0.2122948988973543,
-        "min": 0.022964332555060214,
-        "max": 0.4892673538503411
+        "mean": 0.24749075831545655,
+        "std": 0.15482526706052255,
+        "min": 0.017902565166292607,
+        "max": 0.4801924711539073
       }
     },
     "neural_spheres": {
       "chamfer_distance": {
-        "mean": 0.08947835916006255,
-        "std": 0.03343646858027223,
-        "min": 0.047564817955618524,
-        "max": 0.1448497334169842
+        "mean": 0.08920267063702927,
+        "std": 0.03295853589582966,
+        "min": 0.04705185147993418,
+        "max": 0.14344479925097564
       },
       "earth_movers_distance": {
-        "mean": 0.13179630987219126,
-        "std": 0.03573655160798035,
-        "min": 0.08939145910535243,
-        "max": 0.1947223760865773
+        "mean": 0.13262577157036776,
+        "std": 0.04041417460700507,
+        "min": 0.08703111527697588,
+        "max": 0.20542045827106448
       },
       "hausdorff_distance": {
-        "mean": 0.2377264378672153,
-        "std": 0.04420107691642007,
-        "min": 0.18519679496860988,
-        "max": 0.3064832382685984
+        "mean": 0.2386617673675043,
+        "std": 0.044300204336283455,
+        "min": 0.18749283938532854,
+        "max": 0.3086240713014351
       }
     }
   }
