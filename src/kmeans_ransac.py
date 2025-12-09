@@ -145,17 +145,12 @@ def normalize_mesh(mesh):
     """
     Normalize a mesh to the range [-0.5, 0.5] in its largest dimension.
 
-    Parameters
-    ----------
-    mesh : trimesh.Trimesh
-        Mesh to normalize.
+    Args:
+        mesh (trimesh.Trimesh): Mesh to normalize.
 
-    Returns
-    -------
-    centroid : (3,) ndarray
-        Original mesh centroid.
-    max_dim : float
-        Maximum bounding-box extent used for scaling.
+    Returns:
+        centroid ((3,) ndarray): Original mesh centroid.
+        max_dim (float): Maximum bounding-box extent used for scaling.
     """
     bbox = mesh.bounding_box.extents
     max_dim = np.max(bbox)
@@ -168,19 +163,13 @@ def unnormalize_mesh(mesh, centroid, max_dim):
     """
     Restore a mesh to its original scale and position.
 
-    Parameters
-    ----------
-    mesh : trimesh.Trimesh
-        Normalized mesh to unnormalize.
-    centroid : (3,) ndarray
-        Original mesh centroid.
-    max_dim : float
-        Original maximum bounding-box extent.
+    Args:
+        mesh (trimesh.Trimesh): Normalized mesh to unnormalize.
+        centroid ((3,) ndarray): Original mesh centroid.
+        max_dim (float): Original maximum bounding-box extent.
 
     Returns
-    -------
-    mesh : trimesh.Trimesh
-        The unnormalized mesh.
+        mesh (trimesh.Trimesh): The unnormalized mesh.
     """
     mesh.apply_scale(max_dim)
     mesh.apply_translation(centroid)
